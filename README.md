@@ -21,7 +21,7 @@
 Ter voorbereiding van deze oefenzitting word je verwacht:
 
 * De oefenzitting virtual memory te hebben voltooid.
-* Hoofdstuk 4 van het [xv6 boek](https://github.com/besturingssystemen/xv6-riscv) te hebben gelezen.
+* Hoofdstuk 4 en 5 van het [xv6 boek](https://github.com/besturingssystemen/xv6-riscv) te hebben gelezen.
 
 # GitHub classroom
 
