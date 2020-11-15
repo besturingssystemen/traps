@@ -165,14 +165,43 @@ Om terug te keren van kernel-space naar user-space definieert de trampolinepagin
 
 # Exceptions
 
+We kennen nu het mechanisme waarmee traps worden afgehandeld.
+Tijd om te kijken naar toepassingen dit mechanisme.
+We concentreren ons eerst op toepassingen van exceptions die, zoals eerder vermeld, een trap veroorzaken.
+Nadien bespreken we interrupts, die ook door traps afgehandeld worden.
+
 ## Error handling
 
-* **TODO**
-* **Oefening** Decodeer bepaalde traps gebruik makend van de trap tabellen
+De meest standaard toepassing waaraan gedacht wordt bij exceptions is het afhandelen van fouten.
+
+Zo is er bijvoorbeeld een regel in RISC-V dat een `lw` (load word) instructie enkel mag opgeroepen worden met een adres dat een veelvoud is van 4. Een word is 4 bytes groot, als we ons geheugen opdelen in words is het byte-adres van ieder word namelijk een veelvoud van 4.
+Wanneer we een `lw` instructie proberen uitvoeren met een adres dat geen veelvoud is van 4, wordt de exception *load address misaligned* gesmeten.
+
+Zoals we weten, wordt vervolgens de controle doorgegeven aan de trap handler in één van de verschillende privilegeniveau's, afhankelijk van de waarde van de delegatieregisters.
+Laten we even aannemen dat de exception in de kernel wordt afgehandeld, in supervisor mode.
+
+Wat kan een kernel doen om dit probleem op te lossen?
+De handler zou kunnen beslissen om de `lw` instructie over te slaan, maar dan zou het uitvoerende proces incorrect werken.
+In de meeste gevallen is het antwoord dus simpelweg, het proces vroegtijdig beeïndigen en een boodschap geven dat het proces een exception heeft veroorzaakt met daarbij informatie over de specifieke exception.
+
+De boodschap *segmentation fault* die je krijgt in vele Linux-distributies is een voorbeeld van een exception die niet opgelost kan worden door het besturingssysteem als gevolg van een fout in het programma.
+
+* **Oefening:** **TODO** In jullie xv6 repository hebben we enkele simpele programma's toegevoegd, die elk exceptions veroorzaken.
+Voer deze programma's uit en gebruik de tabel [scause](img/scause.png) om te bepalen wat er misloopt.
+Gebruik het commando `risc64-linux-gnu-objdump -d <executable>` om te achterhalen naar welke regel code de programmateller verwees op het moment dat de exception zich voordeed. Probeer ten slotte het probleem op te lossen door het `.S` bronbestand te wijzigen.
 
 ## System calls
 
-* **TODO**
+Misschien is het je opgevallen dat environment calls (system calls) ook in de scause tabel stonden.
+Zoals eerder reeds vermeld in de oefenzitting over system calls, worden deze geïmplementeerd met behulp van exceptions.
+
+De `ecall` instructie genereert expliciet een exception.
+De code van de exception verschilt afhankelijk van het privilegeniveau waarin de `ecall` uitgevoerd wordt.
+Zo kan je ook vanuit de kernel een `ecall` uitvoeren, die dan in machine mode opgevangen zou kunnen worden.
+
+* Bekijk de code in [`usertrap()`][usertrap]. Herinner je dat deze functie opgeroepen wordt door de trampoline. Je zou ondertussen de code in usertrap moeten begrijpen. Merk op dat deze code ofwel een system call oproept, ofwel een interrupt afhandelt (hierover meer in volgende sectie) ofwel de error message print die we in vorige oefening hebben gedecodeerd.
+
+In het geval van een system call wordt dus [`syscall()`][syscall] opgeroepen, een methode die jullie ondertussen goed zouden moeten kennen.
 
 ## On-demand paging
 
@@ -210,3 +239,4 @@ Om terug te keren van kernel-space naar user-space definieert de trampolinepagin
 [trampoline]: https://github.com/besturingssystemen/xv6-riscv/blob/1f555198d61d1c447e874ae7e5a0868513822023/kernel/trampoline.S
 [trapframe]: https://github.com/besturingssystemen/xv6-riscv/blob/2b5934300a404514ee8bb2f91731cd7ec17ea61c/kernel/proc.h#L52
 [usertrap]: https://github.com/besturingssystemen/xv6-riscv/blob/27057bc9b467db64a3de600f27d6fa3239a04c88/kernel/trap.c#L37
+[syscall]: https://github.com/besturingssystemen/xv6-riscv/blob/2b5934300a404514ee8bb2f91731cd7ec17ea61c/kernel/syscall.c#L133
