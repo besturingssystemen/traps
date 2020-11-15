@@ -10,7 +10,7 @@
 - [Exceptions](#exceptions)
   - [Error handling](#error-handling)
   - [System calls](#system-calls)
-  - [On-demand paging](#on-demand-paging)
+  - [Demand paging](#demand-paging)
   - [Debugging](#debugging)
 - [Interrupts](#interrupts)
   - [Timer interrupts](#timer-interrupts)
@@ -203,7 +203,25 @@ Zo kan je ook vanuit de kernel een `ecall` uitvoeren, die dan in machine mode op
 
 In het geval van een system call wordt dus [`syscall()`][syscall] opgeroepen, een methode die jullie ondertussen goed zouden moeten kennen.
 
-## On-demand paging
+## Demand paging
+
+Zoals ondertussen duidelijk worden exceptions niet enkel gebruikt om fouten op te lossen.
+Een interessante toepassing van exceptions is de implementatie van demand paging.
+Demand paging in het algemeen zorgt ervoor dat een pagina's van een proces pas gealloceerd en gemapt worden de eerste keer dat deze pagina wordt aangesproken.
+
+Neem het voorbeeld van een ELF-bestand.
+Stel dat we geen enkel segment van het ELF-bestand in het geheugen laden. We starten met een page table waarin enkel de trampolinepagina en het trapframe gemapt staat en springen naar het entry point van de elf (het virtueel adres waar de eerste instructie van het programma zich bevindt).
+
+Op dat moment wordt een page fault exception gegenereerd.
+Het entry point zal namelijk niet gemapt zijn.
+De trap handler vangt deze page fault exception op en kan op dat moment de kernel vragen om enkel deze specifieke pagina te mappen.
+Vervolgens kan de code op dat adres wel ingeladen worden en verder uitgevoerd worden.
+Pagina's worden dus pas gemapt op het moment dat ze worden aangesproken.
+Om dit te implementeren maken we gebruik van exceptions.
+
+Je kan demand paging ook implementeren voor een deel van je adresruimte.
+In komende oefening zullen we demand paging toevoegen voor de heap-regio van een user proces.
+
 
 * **TODO**
 * **Oefening** Implementeer `sbrk` door;  
@@ -213,6 +231,16 @@ In het geval van een system call wordt dus [`syscall()`][syscall] opgeroepen, ee
   * *Doel:* Hoe exceptions gebruiken om functionaliteit te implementeren
 
 ## Debugging
+
+Debuggers worden ook mogelijk gemaakt dankzij exceptions.
+Net zoals de `ecall`-instructie een exception genereert en de controle doorgeeft aan de trap handler, zo zal ook de `ebreak`-instructie een exception genereren, met een specifieke exception code.
+
+Wanneer je met behulp van een debugger een breakpoint plaatst in een programma, wordt de instructie waarop je een breakpoint plaatst vervangen door de `ebreak`-instructie.
+Op het moment dat de instructie normaal gezien zou uitvoeren, zal je dus in plaats daarvan een exception genereren.
+Deze kan dan opgevangen worden door een trap handler, die vervolgens de controle door kan geven aan de debugomgeving.
+De executie van het programma is op dat moment gepauzeerd, de debugomgeving kan functionaliteit aanbieden die het mogelijk maakt de toestand van het geheugen en de registers te inspecteren.
+
+In komende oefening zullen we een simpele debugger implementeren voor xv6, gebruik makend van exceptions.
 
 * **TODO**
 * **Oefening** (misschien?): basic debugger schrijven voor xv6:
@@ -225,6 +253,15 @@ In het geval van een system call wordt dus [`syscall()`][syscall] opgeroepen, ee
   * continue
 
 # Interrupts
+
+Tot nog toe hebben we voornamelijk gesproken over exceptions, die traps veroorzaken waarbij de controle wordt doorgegeven aan een trap handler.
+Traps kunnen echter ook veroorzaakt worden door een tweede mechanisme, net iets complexer, genaamd *interrupts*.
+
+Op sommige momenten is het nodig om informatie te geven aan processen die actief zijn, zonder dat de programma's op dat moment zelf om die informatie vragen.
+
+Denk bijvoorbeeld je toetsenbord.
+Op het moment dat je een toets indrukt, verschijnt een letter op het scherm.
+Dit zou in theorie geïmplementeerd kunnen worden door een programma dat in een constante lus probeert na te kijken of er al dan niet een letter ingedrukt werd door de gebruiker (deze techniek noemen we *polling*).
 
 * **TODO**
 
