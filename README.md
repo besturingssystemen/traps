@@ -462,7 +462,34 @@ De `VIRTIO` driver ten slotte wordt gebruikt om een harde schijf te ondersteunen
 
 ## Timer interrupts
 
-* **TODO**
+Wanneer meerdere processen op hetzelfde moment actief zijn binnen een besturingssysteem, zal de processor in vele gevallen deze processen afwisselend uitvoeringstijd toekennen.
+Indien dit snel genoeg verloopt, krijg je de illusie dat de programma's effectief in parallel draaien.
+Wat dit in feite wil zeggen, is dat er een manier nodig is om ervoor te zorgen dat programma's om de zoveel tijd onderbroken worden.
+Het besturingssysteem wil dus in feite een proces opstarten en een timer instellen.
+Wanneer deze timer afloopt, is een nieuw proces aan de beurt.
+
+Om dit mogelijk te maken wordt vaak een hardwarematige timer gebruikt.
+Deze timer kan geprogrammeerd worden om een interrupt te sturen na een instelbare tijd.
+Dit soort interrupt noemen we een timer interrupt.
+
+Deze timer wordt in xv6 opgestart bij het booten van het besturingssysteem.
+Met alle informatie die we in deze oefenzitting verzameld hebben is het interessant om eens een kijkje te nemen in de boot code.
+
+* Lees de code in [kernel/start.c][start]. Probeer de code te begrijpen aan de hand van de commentaren en de kennis die je in deze sessie hebt opgedaan.
+
+Deze code wordt opgeroepen als deel van de boot van xv6 en bevat de code waarin de processor geconfigueerd wordt. 
+Aan het einde van de configuratie wordt (via `mret`) overgegaan naar supervisor mode en de controle doorgegeven aan de main-functie in de kernel.
+Eerder hebben jullie hier reeds de floating point unit van de processor aangezet.
+Merk op dat hier de timer interrupts ook geactiveerd worden.
+
+* Hoeveel clockcycli zal een proces in xv6 ongeveer kunnen uitvoeren alvorens het wordt onderbroken door een timer interrupt?
+
+Timer interrupts in RISC-V worden altijd opgevangen door machine mode en worden dus niet gedelegeerd naar supervisor mode of user mode via delegatieregisters.
+In xv6 zijn dit de enige interrupts en exceptions die door machine mode worden afgehandeld.
+Je kan in [`start()`][start] zien dat alle andere exceptions gedelegeerd worden naar supervisor mode.
+In de functie [`timerinit()`][timerinit] wordt om die reden de machine mode trap handler geconfigueerd zodat deze verwijst naar een trap handler specifiek geschreven voor timer interrupts, namelijk de functie [`timervec`][timervec] in `kernel/kernelvec.S`.
+Deze hardware interrupt wordt zo snel mogelijk afgehandeld en omgezet in een software interrupt.
+**TODO** Nog kort verklaren waarom dit nodig is
 
 
 [trampoline]: https://github.com/besturingssystemen/xv6-riscv/blob/1f555198d61d1c447e874ae7e5a0868513822023/kernel/trampoline.S
@@ -496,3 +523,5 @@ De `VIRTIO` driver ten slotte wordt gebruikt om een harde schijf te ondersteunen
 [devintr]: https://github.com/besturingssystemen/xv6-riscv/blob/27057bc9b467db64a3de600f27d6fa3239a04c88/kernel/trap.c#L177
 [uart]: https://github.com/besturingssystemen/xv6-riscv/blob/6781ac00366e2c46c0a4ed18dfd60e41a3fa4ae6/kernel/uart.c
 [uartintr]: https://github.com/besturingssystemen/xv6-riscv/blob/6781ac00366e2c46c0a4ed18dfd60e41a3fa4ae6/kernel/uart.c#L180
+[start]: https://github.com/besturingssystemen/xv6-riscv/blob/103d9df6ce3154febadcf9a67791d526ec6b07ac/kernel/start.c#L57
+[timervec]: https://github.com/besturingssystemen/xv6-riscv/blob/bebecfd6fd449fb86f73b81982f8c90e5b6bbf90/kernel/kernelvec.S#L93
