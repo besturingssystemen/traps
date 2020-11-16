@@ -12,6 +12,7 @@
   - [Error handling](#error-handling)
   - [System calls](#system-calls)
   - [On-demand paging](#on-demand-paging)
+    - [Bonusgedeelte](#bonusgedeelte)
   - [Debugging](#debugging)
 - [Interrupts](#interrupts)
   - [Timer interrupts](#timer-interrupts)
@@ -255,6 +256,92 @@ In het geval van een system call wordt dus [`syscall()`][syscall] opgeroepen, ee
 
 ## On-demand paging
 
+Tot nu toe hebben we in voorbeeldcode altijd `sbrk` gebruikt om geheugen op de heap te alloceren.
+C-programma's gebruiken typisch echter de functies [`malloc`][malloc ref] en [`free`][free ref] om heap geheugen te alloceren en te dealloceren.
+Deze functie zijn in user space geïmplementeerd en gebruiken intern syscalls zoals `sbrk` om geheugen te krijgen van de kernel.
+Om het aantal syscalls laag te houden, zullen deze functie typisch meer geheugen van de kernel vragen dan ze nodig hebben.
+
+1. Schrijf een programma die 1 byte op de heap alloceert via `malloc(1)` en ga na hoeveel geheugen er via `sbrk` gevraagd wordt.
+   Je kan dit bijvoorbeeld doen door in GDB een breakpoint te zetten in de [`sys_sbrk`][sys_sbrk] functie of door daar een print toe te voegen.
+
+Zoals je gezien zou moeten hebben, alloceert de [`malloc` implementatie van xv6][umalloc.c] een stuk [meer geheugen][over alloc] dan er gevraagd wordt.
+Alhoewel dit inderdaad het aantal syscalls zal verlagen, kan het er ook voor zorgen dat er veel meer geheugen gebruikt wordt dan nodig.
+
+In deze oefening gaan we [_demand paging_][demand paging] implementeren voor het heap geheugen.
+Het idee is het volgende: wanneer er via `sbrk` extra geheugen voor het proces gevraagd wordt, wordt dit geheugen niet onmiddellijk in het proces gemapt.
+Pas wanneer het process dit geheugen probeert te gebruiken, en er dus een page fault gebeurt, zal de kernel een frame alloceren en mappen op het adres dat het process probeerde te gebruiken.
+
+2. Voeg een functie `void pagefault(uint64 va)` toe aan [`vm.c`][vm.c].
+   Het `va` argument zal aangeven welk virtueel adres werd aangesproken toen de page fault gebeurde.
+   Print hier voorlopig een boodschap af en stop het huidige process door de [`struct proc::killed`][proc killed] variabele op `1` te zetten.
+3. Zorg ervoor dat deze functie opgeroepen wordt wanneer er een page fault in user mode voorkomt.
+   Bekijk hiervoor de [`usertrap`][usertrap] functie en laat je inspireren door hoe syscalls daar afgehandeld worden.
+   Het virtuele adres dat de page fault veroorzaakte, vind je in het `stval` CSR ([hint][stval hint]).
+
+Als het goed is, heb je nu een werkende page fault handler die een boodschap print en het proces killt.
+Dit is een goed moment om eens te controleren of de kernel nog naar behoren werkt.
+Je kan hiervoor bijvoorbeeld de `usertests` executable gebruiken.
+
+De volgende stap is om `sbrk` _lazy_ te laten werken.
+Zoals eerder beschreven, wilt dit zeggen dat geheugen niet direct in het proces gemapt wordt tijdens een oproep van `sbrk`.
+
+4. Zoek uit hoe `sbrk` precies werkt, begin hiervoor met het lezen van de [`sys_sbrk`][sys_sbrk] functie.
+   Als er een positief getal aan `sbrk` wordt gegeven, zal het geheugen van het proces vergroot worden.
+   In plaats van dit direct te doen, moet je ervoor zorgen dat de aanvraag enkel geregistreerd wordt zonder geheugen te mappen.
+   De [`struct proc::sz`][proc sz] variabele geeft aan hoeveel geheugen een proces gebruikt.
+   Een negatief argument voor `sbrk` zorgt ervoor dat het geheugen _verkleint_ wordt; dit moet _wel_ blijven gebeuren (waarom?).
+
+Na deze stap zullen user space processen die `sbrk` gebruiken uiteraard niet meer juist werken.
+Wat verwacht je dat er gebeurt met zulke processen?
+Verifieer dit ook.
+
+5. Implementeer nu de logica in de page fault handler om pages _on demand_ te mappen.
+   De functie [`kalloc`][kalloc] kan je gebruiken om nieuwe fysieke frames to alloceren en in de vorige oefenzitting hebben jullie al geleerd hoe je mappings kan maken via [`mappages`][mappages].
+   Er zijn een aantal zaken waar je op moet letten:
+    - Voeg enkel mappings toe voor adressen die eerder via `sbrk` gealloceerd waren (denk aan de [`struct proc::sz`][proc sz] variabele);
+    - Controleer of er niet al een mapping bestaat voor het adres dat de page fault genereerde (wat wilt dit zeggen?);
+    - Als de page fault handler faalt _na_ het alloceren van een frame, moet dit frame weer vrijgegeven worden via [`kfree`][kfree] (waarom?).
+
+Nu is het grootste deel van de benodigde logica voor een lazy `sbrk` geïmplementeerd.
+Controleer door bijvoorbeeld de `vmprintmappings` syscall te gebruiken dat mappings inderdaad on demand aangemaakt worden.
+
+Je zal echter merken dat programma's die `sbrk` gebruiken meestal een [`panic`][panic] veroorzaken, bijvoorbeeld wanneer ze afgesloten worden.
+Er zijn een aantal functies in xv6 die afdwingen dat alle pages tussen `[0, struct proc::sz)` gemapt zijn.
+Dit is begrijpelijk aangezien het (zonder demand paging) een bug zou zijn als dit niet het geval is.
+Nu we demand paging hebben toegevoegd, klopt deze invariant echter niet meer.
+
+6. Vind de functies de een `panic` veroorzaken.
+   Je kan dit bijvoorbeeld doen door [GDB][gdb] te gebruiken en een breakpoint te zetten in de [`panic`][panic] functie.
+   Als je dan een backtrace afprint (via het `backtrace` commando), kan je zien waar `panic` opgeroepen werd.
+   Los de `panic`s op door op de juiste plekken unmapped pages te negeren.
+
+Als het goed is, zullen de meeste user space programma's nu weer uit kunnen voeren zonder problemen.
+Verifieer dit en controleer je implementatie via de `vmprintmappings` syscall.
+
+### Bonusgedeelte
+
+Als je het `usertests` programma runt, zul je echter merken dat er toch nog een paar problemen zijn.
+
+7. Schrijf een user space programma dat de `read` en `write` syscalls gebruikt met buffers in nog niet gemapte pages.
+   Roep dus eerst `sbrk` op en gebruik een pointer naar dit nieuwe geheugen als buffer _zonder_ dit geheugen eerst te gebruiken (want dan wordt het gemapt).
+   Wat is het resultaat en hoe verklaar je dit?
+
+Wanneer syscalls zoals `read` en `write` een pointer krijgen naar user space geheugen, kunnen ze deze niet zomaar gebruiken.
+Herinner je uit de vorige oefenzitting dat de kernel code runt in de kernel address space en het user space geheugen dus niet gemapt is.
+Kernel code gebruikt daarom de volgende functies om aan user space geheugen te kunnen:
+- [`copyout`][copyout]: Kopieert data in de kernel address space naar een user address space;
+- [`copyin`][copyin]: Kopieert data in een user address space naar de kernel address space;
+- [`copyinstr`][copyinstr]: Hetzelfde als `copyin` maar specifiek om strings te kopiëren.
+
+Al deze functies werken op dezelfde manier: gegeven een page table van een user proces en een virtueel adres in dit proces, gebruik eerst de [`walkaddr`][walkaddr] functie om dit adres om te zetten naar een fysiek adres.
+Aangezien dit fysieke adres wel in de kernel gemapt is, kan de data gekopieerd worden naar/van dit adres.
+Als `walkaddr` faalt omdat het adres niet gemapt is, zullen de verschillende copy functies een error teruggeven en faalt de syscall.
+Er zal dus geen page fault gebeuren maar het user space programma krijgt een error code terug van de syscall.
+
+8. Pas `copyin`, `copyinstr` en `copyout` aan zodat on demand pages gemapt worden wanneer nodig.
+
+Als dit gebeurt is, zou het `usertests` programma zonder fouten moeten runnen.
+
 * **TODO**
 * **Oefening** Implementeer `sbrk` door;  
   * Grote regio te reserveren maar nog niet te mappen
@@ -294,3 +381,24 @@ In het geval van een system call wordt dus [`syscall()`][syscall] opgeroepen, ee
 [write mstatus]: https://github.com/besturingssystemen/xv6-riscv/blob/103d9df6ce3154febadcf9a67791d526ec6b07ac/kernel/start.c#L23-L27
 [r_mstatus]: https://github.com/besturingssystemen/xv6-riscv/blob/103d9df6ce3154febadcf9a67791d526ec6b07ac/kernel/riscv.h#L23
 [w_mstatus]: https://github.com/besturingssystemen/xv6-riscv/blob/103d9df6ce3154febadcf9a67791d526ec6b07ac/kernel/riscv.h#L31
+[malloc ref]: https://en.cppreference.com/w/c/memory/malloc
+[free ref]: https://en.cppreference.com/w/c/memory/free
+[sys_sbrk]: https://github.com/besturingssystemen/xv6-riscv/blob/103d9df6ce3154febadcf9a67791d526ec6b07ac/kernel/sysproc.c#L41
+[umalloc.c]: https://github.com/besturingssystemen/xv6-riscv/blob/103d9df6ce3154febadcf9a67791d526ec6b07ac/user/umalloc.c
+[over alloc]: https://github.com/besturingssystemen/xv6-riscv/blob/103d9df6ce3154febadcf9a67791d526ec6b07ac/user/umalloc.c#L54
+[demand paging]: https://en.wikipedia.org/wiki/Demand_paging
+[vm.c]: https://github.com/besturingssystemen/xv6-riscv/blob/103d9df6ce3154febadcf9a67791d526ec6b07ac/kernel/vm.c
+[proc killed]: https://github.com/besturingssystemen/xv6-riscv/blob/103d9df6ce3154febadcf9a67791d526ec6b07ac/kernel/proc.h#L101
+[proc sz]: https://github.com/besturingssystemen/xv6-riscv/blob/103d9df6ce3154febadcf9a67791d526ec6b07ac/kernel/proc.h#L107
+[stval hint]: https://github.com/besturingssystemen/xv6-riscv/blob/103d9df6ce3154febadcf9a67791d526ec6b07ac/kernel/trap.c#L71-L72
+[kalloc]: https://github.com/besturingssystemen/xv6-riscv/blob/103d9df6ce3154febadcf9a67791d526ec6b07ac/kernel/kalloc.c#L65
+[kfree]: https://github.com/besturingssystemen/xv6-riscv/blob/103d9df6ce3154febadcf9a67791d526ec6b07ac/kernel/kalloc.c#L42
+[mappages]: https://github.com/besturingssystemen/xv6-riscv/blob/103d9df6ce3154febadcf9a67791d526ec6b07ac/kernel/vm.c#L133
+[panic]: https://github.com/besturingssystemen/xv6-riscv/blob/103d9df6ce3154febadcf9a67791d526ec6b07ac/kernel/printf.c#L120
+[uvmunmap]: https://github.com/besturingssystemen/xv6-riscv/blob/103d9df6ce3154febadcf9a67791d526ec6b07ac/kernel/vm.c#L159
+[gdb]: https://github.com/besturingssystemen/klaarzetten-werkomgeving#gdb
+[copyout]: https://github.com/besturingssystemen/xv6-riscv/blob/103d9df6ce3154febadcf9a67791d526ec6b07ac/kernel/vm.c#L340
+[copyin]: https://github.com/besturingssystemen/xv6-riscv/blob/103d9df6ce3154febadcf9a67791d526ec6b07ac/kernel/vm.c#L365
+[copyinstr]: https://github.com/besturingssystemen/xv6-riscv/blob/103d9df6ce3154febadcf9a67791d526ec6b07ac/kernel/vm.c#L390
+[walkaddr]: https://github.com/besturingssystemen/xv6-riscv/blob/103d9df6ce3154febadcf9a67791d526ec6b07ac/kernel/vm.c#L100
+
