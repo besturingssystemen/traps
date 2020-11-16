@@ -15,8 +15,9 @@
     - [Bonusgedeelte](#bonusgedeelte)
   - [Debugging](#debugging)
 - [Interrupts](#interrupts)
-  - [Timer interrupts](#timer-interrupts)
+  - [Interrupts in xv6](#interrupts-in-xv6)
   - [Device drivers](#device-drivers)
+  - [Timer interrupts](#timer-interrupts)
 
 # Voorbereiding
 
@@ -398,17 +399,71 @@ Op sommige momenten is het nodig om informatie te geven aan processen die actief
 
 Denk bijvoorbeeld je toetsenbord.
 Op het moment dat je een toets indrukt, verschijnt een letter op het scherm.
-Dit zou in theorie geïmplementeerd kunnen worden door een programma dat in een constante lus probeert na te kijken of er al dan niet een letter ingedrukt werd door de gebruiker (deze techniek noemen we *polling*).
+De kans is echter zeer groot dat op het moment dat je die toets indrukt,
+de processor druk bezet is met het uitvoeren van andere, ongerelateerde instructies.
+Er is dus een manier nodig om de processor te onderbreken.
 
-* **TODO**
+Exceptions onderbreken de flow van een proces, maar deze worden veroorzaakt door het uitvoeren van een (al dan niet foutieve) instructie.
+Toetsaanslagen kan je echter niet voorspellen en kunnen voorkomen op elk mogelijk moment gedurende de uitvoer van een proces.
+Wanneer we de flow van een processor willen onderbreken op een niet-voorspelbaar tijdstip maken we gebruik van een *interrupt*.
+
+Tussen elke instructie die een processor uitvoert zal gecontroleerd worden of er een interrupt actief is.
+Indien dit het geval is, trapt de processor.
+Het is mogelijk om interrupts tijdelijk volledig te disablen, om ervoor te zorgen dat bepaalde code nooit onderbroken kan worden.
+
+> :information_source: Een interrupt kan je vergelijken met een student die zijn vinger opsteekt gedurende een les. De pro(c/f)essor kan zelf kiezen wanneer hij de vraag beantwoordt en kan eerst zijn slide, zin of taak verder afmaken. Een exception kan je vergelijken met een student die zijn vraag roept doorheen de aula. De pro(c/f)essor wordt gedwongen meteen te reageren.
+
+## Interrupts in xv6
+
+Interrupts zijn standaard actief gedurende de uitvoering van xv6-code.
+Indien een interrupt voorkomt, zal de processor, wanneer deze klaar is met het uitvoeren van de actieve instructie, springen naar de trap handler in onze welgekende trampolinepagina, net zoals in het geval van exceptions.
+
+Zoals we weten roept de trampoline [usertrap()][usertrap] op, waarin vervolgens de functie [`devintr()`][devintr] wordt opgeroepen.
+In deze functie kunnen we zien dat xv6 drie soorten interrupts kan afhandelen: `UART` interrupts, `VIRTIO` interrupts en timer interrupts.
+
+## Device drivers
+
+[*UART*](https://en.wikipedia.org/wiki/Universal_asynchronous_receiver-transmitter) staat voor *universal asynchronous receiver-transmitter*.
+Dit is een apparaat dat gebruikt kan worden om (seriële, dus bit per bit) communicatie mogelijk te maken tussen een processor en externe apparaten.
+Vroeger verliep de communicatie tussen een toetsenbord en een processor bijvoorbeeld typisch via een UART-apparaat.
+Vandaag verloopt dit meestal via een *universal serial bus*, beter gekend als [*USB*](https://en.wikipedia.org/wiki/USB).
+
+Wanneer we een toetsenbord aansluiten, bijvoorbeeld via een UART of via USB, kan informatie verstuurd worden naar de processor, zoals de ingedrukte toetsaanslagen. Om deze informatie echter te ontvangen, hebben we nood aan een programma dat weet hoe te communiceren met het apparaat.
+Dat soort programma noemen we een *driver*.
+
+De `qemu` emulator emuleert een UART-apparaat.
+Wanneer je in je Ubuntu-console xv6 opstart en vervolgens in de terminal typt, wordt deze informatie via de geëmuleerde UART doorgestuurd.
+In xv6 lijkt het dus vervolgens alsof er rechtstreeks via een UART informatie binnenkomt.
+
+xv6 heeft dus ook een UART driver. Deze kan je terugvinden in [`kernel/uart.c`][uart].
+Driver code is complex en zeer gebonden aan specifieke apparaten, en dus ook weinig interessant om te bestuderen.
+Wel interessant is om te kijken hoe de samenwerking met interrupts net werkt.
+
+Wanneer we drukken op een toets van een toetsenbord aangesloten via UART op xv6, gebeuren de volgende stappen:
+
+1. De ingedrukte toets gestuurd van het toetsenbord naar de UART
+2. De UART genereert vervolgens een IRQ (interrupt request) op de processor
+3. Indien interrupts actief zijn zal de processor na afloop van de huidige instructie springen naar de correcte trap handler (ook voor interrupts zijn er delegatieregisters)
+4. De trap handler determineert dat de reden van de trap een interrupt was en geeft de controle door aan [`devintr()`][devintr]
+5. [`devintr()`][devintr] leest de waarde van de IRQ, bepaalt dat het een UART-interrupt was en geeft de controle door aan [`uartintr()`][uartintr] in de UART driver.
+6. [`uartintr()`][uartintr] leest een karakter uit de UART en stuurt dit door naar de console van xv6
+
+UART communicatie kan in twee richtingen werken.
+De console van xv6 stuurt de output van de console ook via UART terug naar `qemu`, die het toont in je Ubuntu-terminal.
+
+Merk op dat de essentie van deze device driver dus gebaseerd is op interrupts.
+UART drivers kunnen ook geïmplementeerd worden zonder interrupts.
+Dit kan door met behulp van een proces dat voortdurend actief is in een lus kijkt of er een karakter in de UART buffer staat.
+Deze techniek noemen we *polling*.
+Voor apparaten die weinig invoer sturen op onregelmatige momenten zijn interrupts meestal efficiënter.
+Indien een apparaat voortdurend informatie verstuurt kan polling de betere oplossing zijn, om interrupt overhead te vermijden.
+
+De `VIRTIO` driver ten slotte wordt gebruikt om een harde schijf te ondersteunen. Hier gaan we in deze oefenzitting verder niet op in.
 
 ## Timer interrupts
 
 * **TODO**
 
-## Device drivers
-
-* **TODO**
 
 [trampoline]: https://github.com/besturingssystemen/xv6-riscv/blob/1f555198d61d1c447e874ae7e5a0868513822023/kernel/trampoline.S
 [trapframe]: https://github.com/besturingssystemen/xv6-riscv/blob/2b5934300a404514ee8bb2f91731cd7ec17ea61c/kernel/proc.h#L52
@@ -438,4 +493,6 @@ Dit zou in theorie geïmplementeerd kunnen worden door een programma dat in een 
 [copyin]: https://github.com/besturingssystemen/xv6-riscv/blob/103d9df6ce3154febadcf9a67791d526ec6b07ac/kernel/vm.c#L365
 [copyinstr]: https://github.com/besturingssystemen/xv6-riscv/blob/103d9df6ce3154febadcf9a67791d526ec6b07ac/kernel/vm.c#L390
 [walkaddr]: https://github.com/besturingssystemen/xv6-riscv/blob/103d9df6ce3154febadcf9a67791d526ec6b07ac/kernel/vm.c#L100
-
+[devintr]: https://github.com/besturingssystemen/xv6-riscv/blob/27057bc9b467db64a3de600f27d6fa3239a04c88/kernel/trap.c#L177
+[uart]: https://github.com/besturingssystemen/xv6-riscv/blob/6781ac00366e2c46c0a4ed18dfd60e41a3fa4ae6/kernel/uart.c
+[uartintr]: https://github.com/besturingssystemen/xv6-riscv/blob/6781ac00366e2c46c0a4ed18dfd60e41a3fa4ae6/kernel/uart.c#L180
