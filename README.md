@@ -130,15 +130,15 @@ Neem bijvoorbeeld aan dat we een exception hebben die zich voordoet in user-mode
 Op het moment dat de processor springt naar de waarde in `stvec` zal `satp` nog steeds verwijzen naar de page table van het user proces.
 De adresvertaling gebeurt dus nog steeds volgens de mapping van het user proces. De processor zal dus springen naar code in de user space met een hoger privilegeniveau (in dit geval supervisor mode).
 
-Een besturingssysteem zal er dus voor zorgen dat er kernel code geschreven wordt op het adres `stval` en dat het proces zelf deze code niet kan bewerken (door de pagina niet schrijfbaar te maken).
+Een besturingssysteem zal er dus voor zorgen dat er kernel code geschreven wordt op het adres `stval` en dat het proces zelf deze code niet kan bewerken (door de pagina niet schrijfbaar te maken en de `U`-bit te deactiveren).
 De code op dat adres kan vervolgens de waarde van `satp` wijzigen, en zo de page tables van de kernel activeren, om ervoor te zorgen dat we verder kunnen uitvoeren in de adresruimte van de kernel zelf.
 
 De code die verantwoordelijk is voor het opvangen van traps in xv6 bevindt zich in de trampolinepagina.
-De trampolinepagina is gemapt op het hoogste adres in de virtuele adresruimte van *elk* user-space proces.
+De trampolinepagina is gemapt op het hoogste adres in de virtuele adresruimte van *elk* user space proces.
 
 ### Trampoline
 
-Het is je misschien opgevallen dat de *trampoline* niet enkel gemapt is in de adresruimte van elk user-space proces maar ook in de adresruimte van de kernel zelf.
+Het is je misschien opgevallen dat de *trampoline* niet enkel gemapt is in de adresruimte van elk user space proces maar ook in de adresruimte van de kernel zelf.
 Ook in de kernel is deze pagina gemapt op het hoogst mogelijke virtuele adres.
 
 Eerder hebben we vermeld dat de trampolinepagina `satp` zal wijzigen.
@@ -152,10 +152,10 @@ Om dat te vermijden wordt deze pagina dus op hetzelfde virtuele adres gemapt in 
 Zoals je kan zien voert de trampoline twee taken uit:
 
 1. Het bewaren (en herstellen) van alle registerwaarden in de [`trapframe`][trapframe]. Dit is nodig om te verzekeren dat bij terugkeer uit de trap, het actieve programma kan voortgezet worden met correcte registerwaarden.
-2. Het wijzigen van de `satp` om zo te wisselen van page tables bij transities tussen user-space en kernel-space
+2. Het wijzigen van de `satp` om zo te wisselen van page tables bij transities tussen user space en kernel space
 
-Bij de overgang van user-space naar kernel-space wordt, aan het einde van de trampolinepagina, de kernel-functie [`usertrap()`][usertrap] opgeroepen in `kernel/trap.c`.
-Om terug te keren van kernel-space naar user-space definieert de trampolinepagina de functie `userret`.
+Bij de overgang van user space naar kernel space wordt, aan het einde van de trampolinepagina, de kernel-functie [`usertrap()`][usertrap] opgeroepen in `kernel/trap.c`.
+Om terug te keren van kernel space naar user space definieert de trampolinepagina de functie `userret`.
 
 * **Oefening** De trampolinepagina staat gemapt met `R` (read) en `X` (execute) permissies. Daarnaast is de pagina enkel toegankelijk in supervisor mode (de `U`-bit is inactief). Stel dat de trampolinepagina ook `W` (write) permissies zou hebben en user-mode access zou enabled zijn. Wat voor probleem zou dit kunnen opleveren?
 
