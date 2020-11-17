@@ -88,11 +88,11 @@ In onderstaande afbeelding uit de [RISC-V specificaties](https://riscv.org/techn
 
 ![CSR](img/CSR.png)
 
-Merk op dat elk van deze registers de letter `u` als prefix heeft.
-Deze `u` staat voor user-mode.
-Deze specifieke registers kunnen gebruikt worden door de processor, wanneer deze in user-mode (of een hoger privilegeniveau) uitvoert.
-Elk van deze registers hebben ook een `s`- en `m`-equivalent (bijvoorbeeld `sstatus` en `mstatus`).
-`sstatus` kan gelezen worden in supervisor mode en machine mode, `mstatus` enkel in machine mode.
+Merk op dat elk van deze registers de letter `s` als prefix heeft.
+Deze `s` staat voor user-mode.
+Deze specifieke registers kunnen gebruikt worden door de processor, wanneer deze in supervisor mode (of een hoger privilegeniveau) uitvoert.
+Elk van deze registers hebben ook een `u`- en `m`-equivalent (bijvoorbeeld `ustatus` en `mstatus`).
+`ustatus` kan gelezen worden in alle modes, `mstatus` enkel in machine mode.
 
 ### Delegation register
 
@@ -172,6 +172,7 @@ Bij de overgang van user space naar kernel space wordt, aan het einde van de tra
 Om terug te keren van kernel space naar user space definieert de trampolinepagina de functie `userret`.
 
 * **Oefening** De trampolinepagina staat gemapt met `R` (read) en `X` (execute) permissies. Daarnaast is de pagina enkel toegankelijk in supervisor mode (de `U`-bit is inactief). Stel dat de trampolinepagina ook `W` (write) permissies zou hebben en user-mode access zou enabled zijn. Wat voor probleem zou dit kunnen opleveren?
+* **Oefening** Stel dat je geen `W` (write) permissions hebt maar nog steeds `U` (user) permissions. Kan het dan nog mislopen?
 
 ## Floating point ondersteuning
 
@@ -400,8 +401,6 @@ Wanneer we de flow van een processor willen onderbreken op een niet-voorspelbaar
 Tussen elke instructie die een processor uitvoert zal gecontroleerd worden of er een interrupt actief is.
 Indien dit het geval is, trapt de processor.
 Het is mogelijk om interrupts tijdelijk volledig te disablen, om ervoor te zorgen dat bepaalde code nooit onderbroken kan worden.
-
-> :information_source: Een interrupt kan je vergelijken met een student die zijn vinger opsteekt gedurende een les. De pro(c/f)essor kan zelf kiezen wanneer hij de vraag beantwoordt en kan eerst zijn slide, zin of taak verder afmaken. Een exception kan je vergelijken met een student die zijn vraag roept doorheen de aula. De pro(c/f)essor wordt gedwongen meteen te reageren.
 
 ## Interrupts in xv6
 
