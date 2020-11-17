@@ -129,8 +129,10 @@ De tabellen uit de specs voor [mcause](img/mcause.png) en [scause](img/scause.pn
 
 We weten nu het hardware-mechanisme waarmee traps afgehandeld kunnen worden.
 Er rest ons echter nog een belangrijke vraag om te beantwoorden: worden virtuele of fysieke adressen gebruikt bij het afhandelen van traps?
-Dit hangt volledig af van de huidige configuratie van de processor.
-Indien paging aanstond op het moment dat de trap zich voordoet, zal de waarde in de `xtvec` registers verwijzen naar virtuele adressen.
+Dit hangt volledig af van de huidige configuratie van de processor en van het privilegeniveau waarin de trap afgehandeld wordt.
+Machine-mode ondersteunt geen virtual memory dus wanneer een trap in die mode afgehandeld wordt door naar `mtvec` te springen, zullen er fysieke adressen gebruikt worden.
+In de andere modes hangt het af van de huidige configuratie van van virtual memory.
+Indien paging aanstond op het moment dat de trap zich voordoet, zal de waarde in de `xtvec` registers verwijzen naar virtuele adressen via de huidige page table in `satp`.
 Het adresvertalingsmechanisme blijft dus actief.
 
 Zeer attentieve studenten merken hierbij misschien een probleem op.
@@ -160,8 +162,11 @@ Om dat te vermijden wordt deze pagina dus op hetzelfde virtuele adres gemapt in 
 
 Zoals je kan zien voert de trampoline twee taken uit:
 
-1. Het bewaren (en herstellen) van alle registerwaarden in de [`trapframe`][trapframe]. Dit is nodig om te verzekeren dat bij terugkeer uit de trap, het actieve programma kan voortgezet worden met correcte registerwaarden.
-2. Het wijzigen van de `satp` om zo te wisselen van page tables bij transities tussen user space en kernel space
+1. Het [bewaren][trampoline save regs] (en [herstellen][trampoline restore regs]) van alle registerwaarden in de [`trapframe`][trapframe]. Dit is nodig om te verzekeren dat bij terugkeer uit de trap, het actieve programma kan voortgezet worden met correcte registerwaarden.
+  Merk op dat xv6 het `sscratch` CSR gebruikt om het adres van de trapframe van het huidige proces op te slaan.
+  Dit is een speciaal register waar de processor zelf nooit iets mee doet en dus door de kernel gebruikt mag worden als _scratch_ register.
+2. Het wijzigen van de `satp` om zo te wisselen van page tables bij transities tussen user space en kernel space ([naar kernel][satp kernel], [naar user][satp user]).
+  Na het switchen van de page table wordt de `sfence.vma` instructie gebruikt om de TLB te flushen.
 
 Bij de overgang van user space naar kernel space wordt, aan het einde van de trampolinepagina, de kernel-functie [`usertrap()`][usertrap] opgeroepen in `kernel/trap.c`.
 Om terug te keren van kernel space naar user space definieert de trampolinepagina de functie `userret`.
@@ -202,13 +207,13 @@ De FPU kan aangezet worden door `FS` op `01` te zetten.
 > De FPU zal daar dus niet globaal aanstaan maar enkel bij het switchen naar user mode aangezet worden.
 > Ook de meeste user mode programma's maken geen gebruik van de FPU en het kan dus qua energieverbruik beter zijn om ook voor user space programma's de FPU niet standaard aan te zetten.
 > De kernel zou bijvoorbeeld de exception die gegenereerd wordt wanneer er een floating point instructie gebruikt wordt terwijl de FPU uitstaat op kunnen vangen en de FPU dan pas aanzetten.
-> Om deze oefening eenvoudig te houden, zette we de FPU globaal aan maar we houden jullie niet tegen om een efficiëntere implementatie uit te proberen.
+> Om deze oefening eenvoudig te houden, zetten we de FPU globaal aan maar we houden jullie niet tegen om een efficiëntere implementatie uit te proberen.
 
 Verifieer nu dat je test programma uitgevoerd kan worden zonder exceptions te genereren.
 
 4. Breid je test programma uit door een child te `fork`en en in parent _en_ child floating point operaties uit te voeren.
    Zorg er ook voor dat parent en child een aantal keer naar kernel mode moet switchen (door, bijvoorbeeld, een syscall zoals `sleep` te gebruiken).
-   Print te resultaten van de berekeningen in parent en child af.
+   Print de resultaten van de berekeningen in parent en child af.
    Merk je iets op?
    Voer je test programma meerdere keren uit en bekijk de resultaten.
    > :warning: De `printf` versie in xv6 ondersteunt het afprinten van `double`s niet.
@@ -245,7 +250,7 @@ In de meeste gevallen is het antwoord dus simpelweg, het proces vroegtijdig bee�
 
 De boodschap *segmentation fault* die je krijgt in vele Linux-distributies is een voorbeeld van een exception die niet opgelost kan worden door het besturingssysteem als gevolg van een fout in het programma.
 
-In xv6 kennen jullie ondertussen reeds de foutboodschap `usertrap` en `kerneltrap`, die getoond wordt wanneer xv5 een exception niet kan oplossen.
+In xv6 kennen jullie ondertussen reeds de foutboodschap `usertrap` en `kerneltrap`, die getoond wordt wanneer xv6 een exception niet kan oplossen.
 
 <!-- 
 * **Oefening:** **TODO** In jullie xv6 repository hebben we enkele simpele programma's toegevoegd, die elk exceptions veroorzaken.
@@ -273,7 +278,7 @@ Een andere interessante toepassing van exceptions is de implementatie van demand
 Demand paging in het algemeen zorgt ervoor dat een pagina van een proces pas gealloceerd en gemapt worden de eerste keer dat deze pagina wordt aangesproken.
 
 Neem het voorbeeld van een ELF-bestand.
-Stel dat we geen enkel segment van het ELF-bestand in het geheugen laden. We starten met een page table waarin enkel de trampolinepagina en het trapframe gemapt staat en springen naar het entry point van de elf (het virtueel adres waar de eerste instructie van het programma zich bevindt).
+Stel dat we geen enkel segment van het ELF-bestand in het geheugen laden. We starten met een page table waarin enkel de trampolinepagina en het trapframe gemapt staat en springen naar het entry point van het ELF bestand (het virtueel adres waar de eerste instructie van het programma zich bevindt).
 
 Op dat moment wordt een page fault exception gegenereerd.
 Het entry point zal namelijk niet gemapt zijn.
@@ -286,7 +291,7 @@ Om demand paging te implementeren maken we dus gebruik van exceptions.
 
 Tot nu toe hebben we in voorbeeldcode altijd `sbrk` gebruikt om geheugen op de heap te alloceren.
 C-programma's gebruiken typisch echter de functies [`malloc`][malloc ref] en [`free`][free ref] om heap geheugen te alloceren en te dealloceren.
-Deze functie zijn in user space geïmplementeerd en gebruiken intern syscalls zoals `sbrk` om geheugen te krijgen van de kernel.
+Deze functies zijn in user space geïmplementeerd en gebruiken intern syscalls zoals `sbrk` om geheugen te krijgen van de kernel.
 Om het aantal syscalls laag te houden, zullen deze functie typisch meer geheugen van de kernel vragen dan ze nodig hebben.
 
 1. Schrijf een programma die 1 byte op de heap alloceert via `malloc(1)` en ga na hoeveel geheugen er via `sbrk` gevraagd wordt.
@@ -301,7 +306,7 @@ Pas wanneer het process dit geheugen probeert te gebruiken, en er dus een page f
 
 2. Voeg een functie `void pagefault(uint64 va)` toe aan [`vm.c`][vm.c].
    Het `va` argument zal aangeven welk virtueel adres werd aangesproken toen de page fault gebeurde.
-   Print hier voorlopig een boodschap af en stop het huidige process door de [`struct proc::killed`][proc killed] variabele op `1` te zetten.
+   Print hier voorlopig een boodschap af en stop het huidige process door de [`struct proc::killed`][proc killed] variabele op `1` te zetten voor het huidige proces.
 3. Zorg ervoor dat deze functie opgeroepen wordt wanneer er een page fault in user mode voorkomt.
    Bekijk hiervoor de [`usertrap`][usertrap] functie en laat je inspireren door hoe syscalls daar afgehandeld worden.
    Het virtuele adres dat de page fault veroorzaakte, vind je in het `stval` CSR ([hint][stval hint]).
@@ -309,6 +314,8 @@ Pas wanneer het process dit geheugen probeert te gebruiken, en er dus een page f
 Als het goed is, heb je nu een werkende page fault handler die een boodschap print en het proces killt.
 Dit is een goed moment om eens te controleren of de kernel nog naar behoren werkt.
 Je kan hiervoor bijvoorbeeld de `usertests` executable gebruiken.
+Dit is een user space programma dat standaard met xv6 wordt geleverd en een hele hoop testen uitvoert.
+Je kan dit uitvoeren zoals elk ander user space programma.
 
 De volgende stap is om `sbrk` _lazy_ te laten werken.
 Zoals eerder beschreven, wilt dit zeggen dat geheugen niet direct in het proces gemapt wordt tijdens een oproep van `sbrk`.
@@ -502,7 +509,7 @@ Als dit gebeurt is, zou het `usertests` programma zonder fouten moeten runnen.
 
 [trampoline]: https://github.com/besturingssystemen/xv6-riscv/blob/1f555198d61d1c447e874ae7e5a0868513822023/kernel/trampoline.S
 [trapframe]: https://github.com/besturingssystemen/xv6-riscv/blob/2b5934300a404514ee8bb2f91731cd7ec17ea61c/kernel/proc.h#L52
-[usertrap]: https://github.com/besturingssystemen/xv6-riscv/blob/27057bc9b467db64a3de600f27d6fa3239a04c88/kernel/trap.c#L37
+[usertrap]: https://github.com/besturingssystemen/xv6-riscv/blob/27057bc9b467db64a3de600f27d6fa3239a04c88/kernel/trap.c#L32
 [syscall]: https://github.com/besturingssystemen/xv6-riscv/blob/2b5934300a404514ee8bb2f91731cd7ec17ea61c/kernel/syscall.c#L133
 [start]: https://github.com/besturingssystemen/xv6-riscv/blob/103d9df6ce3154febadcf9a67791d526ec6b07ac/kernel/start.c#L19
 [write mstatus]: https://github.com/besturingssystemen/xv6-riscv/blob/103d9df6ce3154febadcf9a67791d526ec6b07ac/kernel/start.c#L23-L27
@@ -533,3 +540,7 @@ Als dit gebeurt is, zou het `usertests` programma zonder fouten moeten runnen.
 [uartintr]: https://github.com/besturingssystemen/xv6-riscv/blob/6781ac00366e2c46c0a4ed18dfd60e41a3fa4ae6/kernel/uart.c#L180
 [timerinit]: https://github.com/besturingssystemen/xv6-riscv/blob/103d9df6ce3154febadcf9a67791d526ec6b07ac/kernel/start.c#L57
 [timervec]: https://github.com/besturingssystemen/xv6-riscv/blob/bebecfd6fd449fb86f73b81982f8c90e5b6bbf90/kernel/kernelvec.S#L93
+[trampoline save regs]: https://github.com/besturingssystemen/xv6-riscv/blob/103d9df6ce3154febadcf9a67791d526ec6b07ac/kernel/trampoline.S#L27-L65
+[trampoline restore regs]: https://github.com/besturingssystemen/xv6-riscv/blob/103d9df6ce3154febadcf9a67791d526ec6b07ac/kernel/trampoline.S#L104-L134
+[satp kernel]: https://github.com/besturingssystemen/xv6-riscv/blob/103d9df6ce3154febadcf9a67791d526ec6b07ac/kernel/trampoline.S#L76-L79
+[satp user]: https://github.com/besturingssystemen/xv6-riscv/blob/103d9df6ce3154febadcf9a67791d526ec6b07ac/kernel/trampoline.S#L95-L97
