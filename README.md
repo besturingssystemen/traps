@@ -12,13 +12,13 @@
   - [Error handling](#error-handling)
   - [System calls](#system-calls)
   - [Demand paging](#demand-paging)
-    - [Lazy allocation](#lazy-allocation)
   - [Debugging](#debugging)
 - [Interrupts](#interrupts)
   - [Interrupts in xv6](#interrupts-in-xv6)
   - [Device drivers](#device-drivers)
   - [Timer interrupts](#timer-interrupts)
 - [Permanente Evaluatie](#permanente-evaluatie)
+  - [Lazy allocation](#lazy-allocation)
 
 # Voorbereiding
 
@@ -288,74 +288,6 @@ Vervolgens kan de code op dat adres wel ingeladen worden en verder uitgevoerd wo
 Pagina's worden dus pas gemapt op het moment dat ze worden aangesproken.
 Om demand paging te implementeren maken we dus gebruik van exceptions.
 
-### Lazy allocation
-
-Tot nu toe hebben we in voorbeeldcode altijd `sbrk` gebruikt om geheugen op de heap te alloceren.
-C-programma's gebruiken typisch echter de functies [`malloc`][malloc ref] en [`free`][free ref] om heap geheugen te alloceren en te dealloceren.
-Deze functies zijn in user space geïmplementeerd en gebruiken intern syscalls zoals `sbrk` om geheugen te krijgen van de kernel.
-Om het aantal syscalls laag te houden, zullen deze functie typisch meer geheugen van de kernel vragen dan ze nodig hebben.
-
-1. Schrijf een programma die 1 byte op de heap alloceert via `malloc(1)` en ga na hoeveel geheugen er via `sbrk` gevraagd wordt.
-   Je kan dit bijvoorbeeld doen door in GDB een breakpoint te zetten in de [`sys_sbrk`][sys_sbrk] functie of door daar een print toe te voegen.
-
-Zoals je gezien zou moeten hebben, alloceert de [`malloc` implementatie van xv6][umalloc.c] een stuk [meer geheugen][over alloc] dan er gevraagd wordt.
-Alhoewel dit inderdaad het aantal syscalls zal verlagen, kan het er ook voor zorgen dat er veel meer geheugen gebruikt wordt dan nodig.
-
-In deze oefening gaan we [_demand paging_][demand paging] implementeren voor het heap geheugen.
-Het idee is het volgende: wanneer er via `sbrk` extra geheugen voor het proces gevraagd wordt, wordt dit geheugen niet onmiddellijk in het proces gemapt.
-Pas wanneer het process dit geheugen probeert te gebruiken, en er dus een page fault gebeurt, zal de kernel een frame alloceren en mappen op het adres dat het process probeerde te gebruiken.
-
-2. Voeg een functie `void pagefault(uint64 va)` toe aan [`vm.c`][vm.c].
-   Het `va` argument zal aangeven welk virtueel adres werd aangesproken toen de page fault gebeurde.
-   Print hier voorlopig een boodschap af en stop het huidige process door de [`struct proc::killed`][proc killed] variabele op `1` te zetten voor het huidige proces.
-3. Zorg ervoor dat deze functie opgeroepen wordt wanneer er een page fault in user mode voorkomt.
-   Bekijk hiervoor de [`usertrap`][usertrap] functie en laat je inspireren door hoe syscalls daar afgehandeld worden.
-   Het virtuele adres dat de page fault veroorzaakte, vind je in het `stval` CSR ([hint][stval hint]).
-
-Als het goed is, heb je nu een werkende page fault handler die een boodschap print en het proces killt.
-Dit is een goed moment om eens te controleren of de kernel nog naar behoren werkt.
-Je kan hiervoor bijvoorbeeld de `usertests` executable gebruiken.
-Dit is een user space programma dat standaard met xv6 wordt geleverd en een hele hoop testen uitvoert.
-Je kan dit uitvoeren zoals elk ander user space programma.
-
-De volgende stap is om `sbrk` _lazy_ te laten werken.
-Zoals eerder beschreven, wilt dit zeggen dat geheugen niet direct in het proces gemapt wordt tijdens een oproep van `sbrk`.
-
-4. Zoek uit hoe `sbrk` precies werkt, begin hiervoor met het lezen van de [`sys_sbrk`][sys_sbrk] functie.
-   Als er een positief getal aan `sbrk` wordt gegeven, zal het geheugen van het proces vergroot worden.
-   In plaats van dit direct te doen, moet je ervoor zorgen dat de aanvraag enkel geregistreerd wordt zonder geheugen te mappen.
-   De [`struct proc::sz`][proc sz] variabele geeft aan hoeveel geheugen een proces gebruikt.
-   Een negatief argument voor `sbrk` zorgt ervoor dat het geheugen _verkleint_ wordt; dit moet _wel_ blijven gebeuren (waarom?).
-
-Na deze stap zullen user space processen die `sbrk` gebruiken uiteraard niet meer juist werken.
-Wat verwacht je dat er gebeurt met zulke processen?
-Verifieer dit ook.
-
-5. Implementeer nu de logica in de page fault handler om pages _on demand_ te mappen.
-   De functie [`kalloc`][kalloc] kan je gebruiken om nieuwe fysieke frames to alloceren en in de vorige oefenzitting hebben jullie al geleerd hoe je mappings kan maken via [`mappages`][mappages].
-   Er zijn een aantal zaken waar je op moet letten:
-    - Voeg enkel mappings toe voor adressen die eerder via `sbrk` gealloceerd waren (denk aan de [`struct proc::sz`][proc sz] variabele);
-    - Controleer of er niet al een mapping bestaat voor het adres dat de page fault genereerde (wat wilt dit zeggen?);
-    - Als de page fault handler faalt _na_ het alloceren van een frame, moet dit frame weer vrijgegeven worden via [`kfree`][kfree] (waarom?).
-
-Nu is het grootste deel van de benodigde logica voor een lazy `sbrk` geïmplementeerd.
-Controleer door bijvoorbeeld de `vmprintmappings` syscall te gebruiken dat mappings inderdaad on demand aangemaakt worden.
-
-Je zal echter merken dat programma's die `sbrk` gebruiken meestal een [`panic`][panic] veroorzaken, bijvoorbeeld wanneer ze afgesloten worden.
-Er zijn een aantal functies in xv6 die afdwingen dat alle pages tussen `[0, struct proc::sz)` gemapt zijn.
-Dit is begrijpelijk aangezien het (zonder demand paging) een bug zou zijn als dit niet het geval is.
-Nu we demand paging hebben toegevoegd, klopt deze invariant echter niet meer.
-
-6. Vind de functies de een `panic` veroorzaken.
-   Je kan dit bijvoorbeeld doen door [GDB][gdb] te gebruiken en een breakpoint te zetten in de [`panic`][panic] functie.
-   Als je dan een backtrace afprint (via het `backtrace` commando), kan je zien waar `panic` opgeroepen werd.
-   Los de `panic`s op door op de juiste plekken unmapped pages te negeren.
-
-Als het goed is, zullen de meeste user space programma's nu weer uit kunnen voeren zonder problemen.
-Verifieer dit en controleer je implementatie via de `vmprintmappings` syscall.
-Aan het einde van de zitting in het gedeelte permanente evaluatie werken we nog verder aan deze oefening.
-Er zijn nog enkele fouten die gerepareerd moeten worden.
-
 ## Debugging
 
 Debuggers worden ook mogelijk gemaakt dankzij exceptions.
@@ -480,6 +412,75 @@ In de functie [`timerinit()`][timerinit] wordt om die reden de machine mode trap
 
 > :information_source: Om de werklast van deze zitting te beperken voorzien we dit jaar geen oefening over interrupts.
 # Permanente Evaluatie
+## Lazy allocation
+
+Tot nu toe hebben we in voorbeeldcode altijd `sbrk` gebruikt om geheugen op de heap te alloceren.
+C-programma's gebruiken typisch echter de functies [`malloc`][malloc ref] en [`free`][free ref] om heap geheugen te alloceren en te dealloceren.
+Deze functies zijn in user space geïmplementeerd en gebruiken intern syscalls zoals `sbrk` om geheugen te krijgen van de kernel.
+Om het aantal syscalls laag te houden, zullen deze functie typisch meer geheugen van de kernel vragen dan ze nodig hebben.
+
+1. Schrijf een programma die 1 byte op de heap alloceert via `malloc(1)` en ga na hoeveel geheugen er via `sbrk` gevraagd wordt.
+   Je kan dit bijvoorbeeld doen door in GDB een breakpoint te zetten in de [`sys_sbrk`][sys_sbrk] functie of door daar een print toe te voegen.
+
+Zoals je gezien zou moeten hebben, alloceert de [`malloc` implementatie van xv6][umalloc.c] een stuk [meer geheugen][over alloc] dan er gevraagd wordt.
+Alhoewel dit inderdaad het aantal syscalls zal verlagen, kan het er ook voor zorgen dat er veel meer geheugen gebruikt wordt dan nodig.
+
+In deze oefening gaan we [_demand paging_][demand paging] implementeren voor het heap geheugen.
+Het idee is het volgende: wanneer er via `sbrk` extra geheugen voor het proces gevraagd wordt, wordt dit geheugen niet onmiddellijk in het proces gemapt.
+Pas wanneer het process dit geheugen probeert te gebruiken, en er dus een page fault gebeurt, zal de kernel een frame alloceren en mappen op het adres dat het process probeerde te gebruiken.
+
+2. Voeg een functie `void pagefault(uint64 va)` toe aan [`vm.c`][vm.c].
+   Het `va` argument zal aangeven welk virtueel adres werd aangesproken toen de page fault gebeurde.
+   Print hier voorlopig een boodschap af en stop het huidige process door de [`struct proc::killed`][proc killed] variabele op `1` te zetten voor het huidige proces.
+3. Zorg ervoor dat deze functie opgeroepen wordt wanneer er een page fault in user mode voorkomt.
+   Bekijk hiervoor de [`usertrap`][usertrap] functie en laat je inspireren door hoe syscalls daar afgehandeld worden.
+   Het virtuele adres dat de page fault veroorzaakte, vind je in het `stval` CSR ([hint][stval hint]).
+
+Als het goed is, heb je nu een werkende page fault handler die een boodschap print en het proces killt.
+Dit is een goed moment om eens te controleren of de kernel nog naar behoren werkt.
+Je kan hiervoor bijvoorbeeld de `usertests` executable gebruiken.
+Dit is een user space programma dat standaard met xv6 wordt geleverd en een hele hoop testen uitvoert.
+Je kan dit uitvoeren zoals elk ander user space programma.
+
+De volgende stap is om `sbrk` _lazy_ te laten werken.
+Zoals eerder beschreven, wilt dit zeggen dat geheugen niet direct in het proces gemapt wordt tijdens een oproep van `sbrk`.
+
+4. Zoek uit hoe `sbrk` precies werkt, begin hiervoor met het lezen van de [`sys_sbrk`][sys_sbrk] functie.
+   Als er een positief getal aan `sbrk` wordt gegeven, zal het geheugen van het proces vergroot worden.
+   In plaats van dit direct te doen, moet je ervoor zorgen dat de aanvraag enkel geregistreerd wordt zonder geheugen te mappen.
+   De [`struct proc::sz`][proc sz] variabele geeft aan hoeveel geheugen een proces gebruikt.
+   Een negatief argument voor `sbrk` zorgt ervoor dat het geheugen _verkleint_ wordt; dit moet _wel_ blijven gebeuren (waarom?).
+
+Na deze stap zullen user space processen die `sbrk` gebruiken uiteraard niet meer juist werken.
+Wat verwacht je dat er gebeurt met zulke processen?
+Verifieer dit ook.
+
+5. Implementeer nu de logica in de page fault handler om pages _on demand_ te mappen.
+   De functie [`kalloc`][kalloc] kan je gebruiken om nieuwe fysieke frames to alloceren en in de vorige oefenzitting hebben jullie al geleerd hoe je mappings kan maken via [`mappages`][mappages].
+   Er zijn een aantal zaken waar je op moet letten:
+    - Voeg enkel mappings toe voor adressen die eerder via `sbrk` gealloceerd waren (denk aan de [`struct proc::sz`][proc sz] variabele);
+    - Controleer of er niet al een mapping bestaat voor het adres dat de page fault genereerde (wat wilt dit zeggen?);
+    - Als de page fault handler faalt _na_ het alloceren van een frame, moet dit frame weer vrijgegeven worden via [`kfree`][kfree] (waarom?).
+
+Nu is het grootste deel van de benodigde logica voor een lazy `sbrk` geïmplementeerd.
+Controleer door bijvoorbeeld de `vmprintmappings` syscall te gebruiken dat mappings inderdaad on demand aangemaakt worden.
+
+Je zal echter merken dat programma's die `sbrk` gebruiken meestal een [`panic`][panic] veroorzaken, bijvoorbeeld wanneer ze afgesloten worden.
+Er zijn een aantal functies in xv6 die afdwingen dat alle pages tussen `[0, struct proc::sz)` gemapt zijn.
+Dit is begrijpelijk aangezien het (zonder demand paging) een bug zou zijn als dit niet het geval is.
+Nu we demand paging hebben toegevoegd, klopt deze invariant echter niet meer.
+
+6. Vind de functies de een `panic` veroorzaken.
+   Je kan dit bijvoorbeeld doen door [GDB][gdb] te gebruiken en een breakpoint te zetten in de [`panic`][panic] functie.
+   Als je dan een backtrace afprint (via het `backtrace` commando), kan je zien waar `panic` opgeroepen werd.
+   Los de `panic`s op door op de juiste plekken unmapped pages te negeren.
+
+Als het goed is, zullen de meeste user space programma's nu weer uit kunnen voeren zonder problemen.
+Verifieer dit en controleer je implementatie via de `vmprintmappings` syscall.
+Aan het einde van de zitting in het gedeelte permanente evaluatie werken we nog verder aan deze oefening.
+Er zijn nog enkele fouten die gerepareerd moeten worden.
+
+
 
 Voor de permanente evaluatie komen we terug op onze demand paging/lazy allocation oefening. Als je het `usertests` programma runt, zul je merken dat er toch nog een paar problemen zijn met onze lazy heap allocatie.
 
