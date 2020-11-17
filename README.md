@@ -8,16 +8,17 @@
   - [Virtual memory](#virtual-memory)
     - [Trampoline](#trampoline)
   - [Floating point ondersteuning](#floating-point-ondersteuning)
-- [Exceptions](#exceptions)
+- [Toepassingen van exceptions](#toepassingen-van-exceptions)
   - [Error handling](#error-handling)
   - [System calls](#system-calls)
   - [Demand paging](#demand-paging)
-    - [Bonusgedeelte](#bonusgedeelte)
+    - [Lazy allocation](#lazy-allocation)
   - [Debugging](#debugging)
 - [Interrupts](#interrupts)
   - [Interrupts in xv6](#interrupts-in-xv6)
   - [Device drivers](#device-drivers)
   - [Timer interrupts](#timer-interrupts)
+- [Permanente Evaluatie](#permanente-evaluatie)
 
 # Voorbereiding
 
@@ -214,11 +215,10 @@ De FPU gebruikt echter andere registers en deze worden niet bewaard in het trapf
     - Voeg code toe aan de [trampoline][trampoline] om alle floating point registers op te slaan in (gebruik de `fsd` instructie) en weer te herstellen uit (`fld`) het trapframe.
 6. Verifieer dat je test programma nu _wel_ consistente resultaten geeft.
 
-# Exceptions
+# Toepassingen van exceptions
 
-We kennen nu het mechanisme waarmee traps worden afgehandeld.
-Tijd om te kijken naar toepassingen dit mechanisme.
-We concentreren ons eerst op toepassingen van exceptions die, zoals eerder vermeld, een trap veroorzaken.
+We kennen nu het mechanisme waarmee traps worden afgehandeld en hebben reeds onze eerste ervaringen met exceptions gehad.
+Laten we nu eens kijken naar enkele toepassingen van exceptions.
 Nadien bespreken we interrupts, die ook door traps afgehandeld worden.
 
 ## Error handling
@@ -237,9 +237,13 @@ In de meeste gevallen is het antwoord dus simpelweg, het proces vroegtijdig bee�
 
 De boodschap *segmentation fault* die je krijgt in vele Linux-distributies is een voorbeeld van een exception die niet opgelost kan worden door het besturingssysteem als gevolg van een fout in het programma.
 
+In xv6 kennen jullie ondertussen reeds de foutboodschap `usertrap` en `kerneltrap`, die getoond wordt wanneer xv5 een exception niet kan oplossen.
+
+<!-- 
 * **Oefening:** **TODO** In jullie xv6 repository hebben we enkele simpele programma's toegevoegd, die elk exceptions veroorzaken.
 Voer deze programma's uit en gebruik de tabel [scause](img/scause.png) om te bepalen wat er misloopt.
 Gebruik het commando `risc64-linux-gnu-objdump -d <executable>` om te achterhalen naar welke regel code de programmateller verwees op het moment dat de exception zich voordeed. Probeer ten slotte het probleem op te lossen door het `.S` bronbestand te wijzigen.
+-->
 
 ## System calls
 
@@ -256,9 +260,9 @@ In het geval van een system call wordt dus [`syscall()`][syscall] opgeroepen, ee
 
 ## Demand paging
 
-Zoals ondertussen duidelijk worden exceptions niet enkel gebruikt om fouten op te lossen.
-Een interessante toepassing van exceptions is de implementatie van demand paging.
-Demand paging in het algemeen zorgt ervoor dat een pagina's van een proces pas gealloceerd en gemapt worden de eerste keer dat deze pagina wordt aangesproken.
+Exceptions worden dus niet enkel gebruikt om fouten op te lossen, ook voor system calls.
+Een andere interessante toepassing van exceptions is de implementatie van demand paging.
+Demand paging in het algemeen zorgt ervoor dat een pagina van een proces pas gealloceerd en gemapt worden de eerste keer dat deze pagina wordt aangesproken.
 
 Neem het voorbeeld van een ELF-bestand.
 Stel dat we geen enkel segment van het ELF-bestand in het geheugen laden. We starten met een page table waarin enkel de trampolinepagina en het trapframe gemapt staat en springen naar het entry point van de elf (het virtueel adres waar de eerste instructie van het programma zich bevindt).
@@ -268,11 +272,9 @@ Het entry point zal namelijk niet gemapt zijn.
 De trap handler vangt deze page fault exception op en kan op dat moment de kernel vragen om enkel deze specifieke pagina te mappen.
 Vervolgens kan de code op dat adres wel ingeladen worden en verder uitgevoerd worden.
 Pagina's worden dus pas gemapt op het moment dat ze worden aangesproken.
-Om dit te implementeren maken we gebruik van exceptions.
+Om demand paging te implementeren maken we dus gebruik van exceptions.
 
-Je kan demand paging ook implementeren voor een deel van je adresruimte.
-In komende oefening zullen we demand paging toevoegen voor de heap-regio van een user proces.
-
+### Lazy allocation
 
 Tot nu toe hebben we in voorbeeldcode altijd `sbrk` gebruikt om geheugen op de heap te alloceren.
 C-programma's gebruiken typisch echter de functies [`malloc`][malloc ref] en [`free`][free ref] om heap geheugen te alloceren en te dealloceren.
@@ -335,37 +337,8 @@ Nu we demand paging hebben toegevoegd, klopt deze invariant echter niet meer.
 
 Als het goed is, zullen de meeste user space programma's nu weer uit kunnen voeren zonder problemen.
 Verifieer dit en controleer je implementatie via de `vmprintmappings` syscall.
-
-### Bonusgedeelte
-
-Als je het `usertests` programma runt, zul je echter merken dat er toch nog een paar problemen zijn.
-
-7. Schrijf een user space programma dat de `read` en `write` syscalls gebruikt met buffers in nog niet gemapte pages.
-   Roep dus eerst `sbrk` op en gebruik een pointer naar dit nieuwe geheugen als buffer _zonder_ dit geheugen eerst te gebruiken (want dan wordt het gemapt).
-   Wat is het resultaat en hoe verklaar je dit?
-
-Wanneer syscalls zoals `read` en `write` een pointer krijgen naar user space geheugen, kunnen ze deze niet zomaar gebruiken.
-Herinner je uit de vorige oefenzitting dat de kernel code runt in de kernel address space en het user space geheugen dus niet gemapt is.
-Kernel code gebruikt daarom de volgende functies om aan user space geheugen te kunnen:
-- [`copyout`][copyout]: Kopieert data in de kernel address space naar een user address space;
-- [`copyin`][copyin]: Kopieert data in een user address space naar de kernel address space;
-- [`copyinstr`][copyinstr]: Hetzelfde als `copyin` maar specifiek om strings te kopiëren.
-
-Al deze functies werken op dezelfde manier: gegeven een page table van een user proces en een virtueel adres in dit proces, gebruik eerst de [`walkaddr`][walkaddr] functie om dit adres om te zetten naar een fysiek adres.
-Aangezien dit fysieke adres wel in de kernel gemapt is, kan de data gekopieerd worden naar/van dit adres.
-Als `walkaddr` faalt omdat het adres niet gemapt is, zullen de verschillende copy functies een error teruggeven en faalt de syscall.
-Er zal dus geen page fault gebeuren maar het user space programma krijgt een error code terug van de syscall.
-
-8. Pas `copyin`, `copyinstr` en `copyout` aan zodat on demand pages gemapt worden wanneer nodig.
-
-Als dit gebeurt is, zou het `usertests` programma zonder fouten moeten runnen.
-
-* **TODO**
-* **Oefening** Implementeer `sbrk` door;  
-  * Grote regio te reserveren maar nog niet te mappen
-  * Bij page fault te checken of dereference in de reserved maar unmapped regio valt
-  * Soort on-demand paging in die regio
-  * *Doel:* Hoe exceptions gebruiken om functionaliteit te implementeren
+Aan het einde van de zitting in het gedeelte permanente evaluatie werken we nog verder aan deze oefening.
+Er zijn nog enkele fouten die gerepareerd moeten worden.
 
 ## Debugging
 
@@ -377,6 +350,7 @@ Op het moment dat de instructie normaal gezien zou uitvoeren, zal je dus in plaa
 Deze kan dan opgevangen worden door een trap handler, die vervolgens de controle door kan geven aan de debugomgeving.
 De executie van het programma is op dat moment gepauzeerd, de debugomgeving kan functionaliteit aanbieden die het mogelijk maakt de toestand van het geheugen en de registers te inspecteren.
 
+<!--
 In komende oefening zullen we een simpele debugger implementeren voor xv6, gebruik makend van exceptions.
 
 * **TODO**
@@ -388,6 +362,8 @@ In komende oefening zullen we een simpele debugger implementeren voor xv6, gebru
   * Dump alle registers naar stdout
   * Vervang `ebreak` terug door originele instructie
   * continue
+
+-->
 
 # Interrupts
 
@@ -487,8 +463,33 @@ Timer interrupts in RISC-V worden altijd opgevangen door machine mode en worden 
 In xv6 zijn dit de enige interrupts en exceptions die door machine mode worden afgehandeld.
 Je kan in [`start()`][start] zien dat alle andere exceptions gedelegeerd worden naar supervisor mode.
 In de functie [`timerinit()`][timerinit] wordt om die reden de machine mode trap handler geconfigueerd zodat deze verwijst naar een trap handler specifiek geschreven voor timer interrupts, namelijk de functie [`timervec`][timervec] in `kernel/kernelvec.S`.
-Deze hardware interrupt wordt zo snel mogelijk afgehandeld en omgezet in een software interrupt.
-**TODO** Nog kort verklaren waarom dit nodig is
+
+> :information_source: Om de werklast van deze zitting te beperken voorzien we dit jaar geen oefening over interrupts.
+# Permanente Evaluatie
+
+Voor de permanente evaluatie komen we terug op onze demand paging/lazy allocation oefening. Als je het `usertests` programma runt, zul je merken dat er toch nog een paar problemen zijn met onze lazy heap allocatie.
+
+7. Schrijf een user space programma dat de `read` en `write` syscalls gebruikt met buffers in nog niet gemapte pages.
+   Roep dus eerst `sbrk` op en gebruik een pointer naar dit nieuwe geheugen als buffer _zonder_ dit geheugen eerst te gebruiken (want dan wordt het gemapt).
+   Wat is het resultaat en hoe verklaar je dit?
+
+Wanneer syscalls zoals `read` en `write` een pointer krijgen naar user space geheugen, kunnen ze deze niet zomaar gebruiken.
+Herinner je uit de vorige oefenzitting dat de kernel code runt in de kernel address space en het user space geheugen dus niet gemapt is.
+Kernel code gebruikt daarom de volgende functies om aan user space geheugen te kunnen:
+- [`copyout`][copyout]: Kopieert data in de kernel address space naar een user address space;
+- [`copyin`][copyin]: Kopieert data in een user address space naar de kernel address space;
+- [`copyinstr`][copyinstr]: Hetzelfde als `copyin` maar specifiek om strings te kopiëren.
+
+Al deze functies werken op dezelfde manier: gegeven een page table van een user proces en een virtueel adres in dit proces, gebruik eerst de [`walkaddr`][walkaddr] functie om dit adres om te zetten naar een fysiek adres.
+Aangezien dit fysieke adres wel in de kernel gemapt is, kan de data gekopieerd worden naar/van dit adres.
+Als `walkaddr` faalt omdat het adres niet gemapt is, zullen de verschillende copy functies een error teruggeven en faalt de syscall.
+Er zal dus geen page fault gebeuren maar het user space programma krijgt een error code terug van de syscall.
+
+8. Pas `copyin`, `copyinstr` en `copyout` aan zodat on demand pages gemapt worden wanneer nodig.
+
+Als dit gebeurt is, zou het `usertests` programma zonder fouten moeten runnen.
+
+
 
 
 [trampoline]: https://github.com/besturingssystemen/xv6-riscv/blob/1f555198d61d1c447e874ae7e5a0868513822023/kernel/trampoline.S
@@ -522,5 +523,5 @@ Deze hardware interrupt wordt zo snel mogelijk afgehandeld en omgezet in een sof
 [devintr]: https://github.com/besturingssystemen/xv6-riscv/blob/27057bc9b467db64a3de600f27d6fa3239a04c88/kernel/trap.c#L177
 [uart]: https://github.com/besturingssystemen/xv6-riscv/blob/6781ac00366e2c46c0a4ed18dfd60e41a3fa4ae6/kernel/uart.c
 [uartintr]: https://github.com/besturingssystemen/xv6-riscv/blob/6781ac00366e2c46c0a4ed18dfd60e41a3fa4ae6/kernel/uart.c#L180
-[start]: https://github.com/besturingssystemen/xv6-riscv/blob/103d9df6ce3154febadcf9a67791d526ec6b07ac/kernel/start.c#L57
+[timerinit]: https://github.com/besturingssystemen/xv6-riscv/blob/103d9df6ce3154febadcf9a67791d526ec6b07ac/kernel/start.c#L57
 [timervec]: https://github.com/besturingssystemen/xv6-riscv/blob/bebecfd6fd449fb86f73b81982f8c90e5b6bbf90/kernel/kernelvec.S#L93
