@@ -2,7 +2,7 @@
 - [GitHub classroom](#github-classroom)
 - [Traps](#traps)
   - [Traps in RISC-V](#traps-in-risc-v)
-    - [CSR Registers](#csr-registers)
+    - [Control and status registers](#control-and-status-registers)
     - [Delegation register](#delegation-register)
     - [Trap vectors](#trap-vectors)
   - [Virtual memory](#virtual-memory)
@@ -55,7 +55,7 @@ dat deze instructie niet mag uitgevoerd worden.
 Het kan namelijk zijn dat de pagina van het adres niet gemapt is als *writable*.
 Hoe kan de processor deze instructie dan uitvoeren?
 
-Dit specifiek scenario is een voorbeeld van een *exception*.
+In dit specifieke scenario zal de processor een *exception* genereren.
 Iedere *exception* veroorzaakt een *trap*.
 In plaats van de *faulting instruction* uit te voeren, zal de processor springen naar een andere locatie in het geheugen.
 Op die locatie vinden we een *trap handler*.
@@ -71,18 +71,19 @@ Om hierop te antwoorden moeten we even uitleggen exact hoe een trap in RISC-V af
 
 ## Traps in RISC-V
 
-### CSR Registers
+### Control and status registers
 
 RISC-V heeft een verzameling speciale registers genaamd *control and status registers* (CSR).
 Deze registers worden specifiek gebruikt om bepaalde speciale functionaliteiten te kunnen implementeren, zoals exceptions.
-In onderstaande afbeelding uit de [RISC-V specificaties](https://riscv.org/technical/specifications/) worden enkele van deze CSR registers gerelateerd aan exception handling beschreven:
+In onderstaande afbeelding uit de [RISC-V specificaties](https://riscv.org/technical/specifications/) worden enkele van deze CSRs gerelateerd aan exception handling beschreven:
 
-![CSR-registers](img/CSR.png)
+![CSR](img/CSR.png)
 
 Merk op dat elk van deze registers de letter `u` als prefix heeft.
 Deze `u` staat voor user-mode.
 Deze specifieke registers kunnen gebruikt worden door de processor, wanneer deze in user-mode (of een hoger privilegeniveau) uitvoert.
 Elk van deze registers hebben ook een `s`- en `m`-equivalent (bijvoorbeeld `sstatus` en `mstatus`).
+`sstatus` kan gelezen worden in supervisor mode en machine mode, `mstatus` enkel in machine mode.
 
 ### Delegation register
 
@@ -90,15 +91,15 @@ Op het moment dat een trap optreedt, moet beslist worden in welk privilegeniveau
 Standaard is dit in machine mode, het hoogste privilegeniveau.
 Er is echter een mogelijkheid voorzien om traps te forwarden naar supervisor mode of user mode.
 
-Om traps te forwarden wordt gebruik gemaakt van speciale delegatieregisters (CSRs).
+Om traps te forwarden wordt gebruik gemaakt van speciale delegatieregisters (dit zijn ook CSRs).
 In totaal zijn er vier verschilende delegatieregisters: `medeleg`, `sedeleg` voor exceptions en `mideleg` en `sideleg` voor interrupts.
 Op het gedeelte interrupts komen we later in de sessie terug.
 
-Indien de oorzaak van de trap een exception was, wordt gekeken in de `medeleg` register.
+Indien de oorzaak van de trap een exception was, wordt gekeken in het `medeleg` register.
 Elke bit van dit register is gelinkt aan een specifieke exception.
-Indien de bit van een specifieke exception op `1` staat, wordt deze exception doorgestuurd naar het lagere privilegeniveau.
+Indien de bit van een specifieke exception op `1` staat, wordt deze exception doorgestuurd naar het volgende (lagere) privilegeniveau.
 Indien de specifieke processor een supervisor mode heeft, zal de exception dus in supervisor mode afgehandeld worden.
-Via `sedeleg` kunnen vervolgens exceptions verder doorgestuurd worden naar user mode.
+Via `sedeleg` kunnen vervolgens exceptions verder doorgestuurd worden naar user mode, op dezelfde wijze.
 
 ### Trap vectors
 
@@ -109,11 +110,9 @@ Stel dat de exception in machine mode wordt afgehandeld.
 De oorzaak van de exception wordt geschreven naar het CSR `mcause`.
 De waarde van de program counter op het moment dat de exception zich voordeed, wordt geschreven naar `mepc`.
 Indien de exception veroorzaakt werd door een adres aan te spreken, zal de waarde van dit adres in `mtval` geplaatst worden.
-In de andere privilegeniveaus gebeurt exact hetzelfde maar dan met de registers van dat privilegeniveau.
+In de andere privilegeniveaus gebeurt exact hetzelfde, maar dan met de registers van dat privilegeniveau.
 
 De tabellen uit de specs voor [mcause](img/mcause.png) en [scause](img/scause.png) kunnen gebruikt worden om te bepalen welke waarde in deze registers geplaatst worden per interrupt of exception.
-
-**TODO** ucause tabel?
 
 * **Oefening** Een programma in user-mode voert de instructie op adres `0x0x4B1D` uit: `sb t0, 0x0FF1CE`. Dit adres bevindt zich in een pagina die niet schrijfbaar is. De waarde van het `medeleg` register staat op `0xffffffff`, de waarde van het `sedeleg` register op `0x0`. In `mtvec` staat het adres `0xdeadbeef`, in `stvec` staat het adres `0xcafebabe` en in `utvec` staat het adres `0xBAADF00D`. Op welk adres bevindt zich de trap handler die de exception zal afhandelen? In welk privilegeniveau wordt de exception afgehandeld? Welke waarden zullen er in de `xcause`, `xepc` en `xtval` registers geplaatst worden (en welke letter is *x*)?
 
