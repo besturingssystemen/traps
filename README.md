@@ -175,9 +175,9 @@ Op RISC-V zijn er 32 floating point registers genaamd `f0` tot `f31`.
    riscv64-linux-gnu-objdump -d user/_test
    ```
 
-Als je je programma uitvoert, zul je merken dat het crasht door een exceptie.
+Als je je programma uitvoert, zul je merken dat het crasht door een exception.
 
-2. Welke exceptie wordt er precies gegenereerd en door welke instructie?
+2. Welke exception wordt er precies gegenereerd en door welke instructie?
 
 Op RISC-V staat de FPU uit na het opstarten.
 Het `mstatus` CSR bevat twee bits (`FS`) die de status van de FPU beheren.
@@ -192,10 +192,10 @@ De FPU kan aangezet worden door `FS` op `01` te zetten.
 > :information_source: De Linux kernel staat voor efficiëntie redenen geen floating point code toe in kernel mode.
 > De FPU zal daar dus niet globaal aanstaan maar enkel bij het switchen naar user mode aangezet worden.
 > Ook de meeste user mode programma's maken geen gebruik van de FPU en het kan dus qua energieverbruik beter zijn om ook voor user space programma's de FPU niet standaard aan te zetten.
-> De kernel zou bijvoorbeeld de exceptie die gegenereerd wordt wanneer er een floating point instructie gebruikt wordt terwijl de FPU uitstaat op kunnen vangen en de FPU dan pas aanzetten.
+> De kernel zou bijvoorbeeld de exception die gegenereerd wordt wanneer er een floating point instructie gebruikt wordt terwijl de FPU uitstaat op kunnen vangen en de FPU dan pas aanzetten.
 > Om deze oefening eenvoudig te houden, zette we de FPU globaal aan maar we houden jullie niet tegen om een efficiëntere implementatie uit te proberen.
 
-Verifieer nu dat je test programma uitgevoerd kan worden zonder excepties te genereren.
+Verifieer nu dat je test programma uitgevoerd kan worden zonder exceptions te genereren.
 
 4. Breid je test programma uit door een child te `fork`en en in parent _en_ child floating point operaties uit te voeren.
    Zorg er ook voor dat parent en child een aantal keer naar kernel mode moet switchen (door, bijvoorbeeld, een syscall zoals `sleep` te gebruiken).
