@@ -20,6 +20,7 @@
   - [Interrupt counters](#interrupt-counters)
 - [Permanente Evaluatie](#permanente-evaluatie)
   - [Lazy allocation](#lazy-allocation)
+  - [Bonusoefening](#bonusoefening)
 
 # Voorbereiding
 
@@ -496,12 +497,10 @@ Nu we demand paging hebben toegevoegd, klopt deze invariant echter niet meer.
 
 Als het goed is, zullen de meeste user space programma's nu weer uit kunnen voeren zonder problemen.
 Verifieer dit en controleer je implementatie via de `vmprintmappings` syscall.
-Aan het einde van de zitting in het gedeelte permanente evaluatie werken we nog verder aan deze oefening.
-Er zijn nog enkele fouten die gerepareerd moeten worden.
 
+## Bonusoefening
 
-
-Voor de permanente evaluatie komen we terug op onze demand paging/lazy allocation oefening. Als je het `usertests` programma runt, zul je merken dat er toch nog een paar problemen zijn met onze lazy heap allocatie.
+Als je het `usertests` programma runt, zul je merken dat er toch nog een paar problemen zijn met onze lazy heap allocatie.
 
 7. Schrijf een user space programma dat de `read` en `write` syscalls gebruikt met buffers in nog niet gemapte pages.
    Roep dus eerst `sbrk` op en gebruik een pointer naar dit nieuwe geheugen als buffer _zonder_ dit geheugen eerst te gebruiken (want dan wordt het gemapt).
