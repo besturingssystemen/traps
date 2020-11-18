@@ -91,7 +91,7 @@ In onderstaande afbeelding uit de [RISC-V specificaties](https://riscv.org/techn
 ![CSR](img/CSR.png)
 
 Merk op dat elk van deze registers de letter `s` als prefix heeft.
-Deze `s` staat voor user-mode.
+Deze `s` staat voor supervisor-mode.
 Deze specifieke registers kunnen gebruikt worden door de processor, wanneer deze in supervisor mode (of een hoger privilegeniveau) uitvoert.
 Elk van deze registers hebben ook een `u`- en `m`-equivalent (bijvoorbeeld `ustatus` en `mstatus`).
 `ustatus` kan gelezen worden in alle modes, `mstatus` enkel in machine mode.
