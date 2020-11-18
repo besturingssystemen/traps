@@ -184,20 +184,38 @@ Op de meeste processoren, alsook op RISC-V, worden zulke operaties uitgevoerd do
 Deze FPU zal berekeningen uitvoeren op speciale registers die onafhankelijk zijn van de general purpose registers die gebruikt worden voor integer operaties.
 Op RISC-V zijn er 32 floating point registers genaamd `f0` tot `f31`.
 
-1. Schrijf een user space programma dat gebruik maakt van floating point operaties.
-   Als je bewerkingen uitvoert op variabelen van het type `double`, zal de compiler floating point instructies genereren.
+1. Voeg het volgende user space programma toe dat gebruikt maakt van floating point operaties:
+   ```c
+   #include "user.h"
+
+   double get_sum() {
+     double sum = 0;
+
+     for (double d = 1.23; d < 100; d *= 1.9) {
+       sum += d;
+     }
+
+     return sum;
+   }
+
+   int main() {
+     double sum = get_sum();
+     printf("Sum: %d\n", (int)sum);
+     return 0;
+   }
+   ```
    Op RISC-V beginnen alle floating point instructies met een `f`, bijvoorbeeld: `fld` (float load), `fadd`, `fmul`.
-   Verifieer dat je programma daadwerkelijk zulke instructies gebruikt via `objdump` (vervang `user/_test` door de executable van je eigen programma):
+   Verifieer dat dit programma daadwerkelijk zulke instructies gebruikt door via `objdump` de assembly code van de `get_sum` functie af te printen (vervang `user/_test` door de executable van je eigen programma):
    ```shell
-   riscv64-linux-gnu-objdump -d user/_test
+   riscv64-linux-gnu-objdump --disassemble=get_sum user/_test
    ```
 
-Als je je programma uitvoert, zul je merken dat het crasht door een exception.
-
-2. Welke exception wordt er precies gegenereerd en door welke instructie?
+2. Voer de executable nu uit in xv6.
+   Je zult merken dat het crasht door een exception.
+   Welke exception wordt er precies gegenereerd en door welke instructie?
 
 Op RISC-V staat de FPU uit na het opstarten.
-Het `mstatus` CSR bevat twee bits (`FS`) die de status van de FPU beheren.
+Het [`mstatus`](img/mstatus.png) CSR bevat twee bits (`FS`) die de status van de FPU beheren.
 De FPU kan aangezet worden door `FS` op `01` te zetten.
 
 3. Zorg ervoor dat de FPU globaal aanstaat.
@@ -205,6 +223,7 @@ De FPU kan aangezet worden door `FS` op `01` te zetten.
    Je kan zien dat `mstatus` eerste gelezen wordt in de variabele `x` (geweldige naam!) via de functie [`r_mstatus`][r_mstatus].
    Dan worden er een aantal configuratie bits gezet in `x` (je hoeft niet te begrijpen wat deze precies doen) vooraleer `x` terug naar `mstatus` geschreven wordt via [`w_mstatus`][w_mstatus].
    Je kan de FPU dus aanzetten door de eerste bit van `FS` (bit 13 van `mstatus`) op 1 te zetten in de variabele `x`.
+   > :bulb: Je kan in C een getal maken dat enkel bit 13 op 1 heeft staan via `(1 << 13)`.
 
 > :information_source: De Linux kernel staat voor efficiëntie redenen geen floating point code toe in kernel mode.
 > De FPU zal daar dus niet globaal aanstaan maar enkel bij het switchen naar user mode aangezet worden.
@@ -214,13 +233,44 @@ De FPU kan aangezet worden door `FS` op `01` te zetten.
 
 Verifieer nu dat je test programma uitgevoerd kan worden zonder exceptions te genereren.
 
-4. Breid je test programma uit door een child te `fork`en en in parent _en_ child floating point operaties uit te voeren.
-   Zorg er ook voor dat parent en child een aantal keer naar kernel mode moet switchen (door, bijvoorbeeld, een syscall zoals `sleep` te gebruiken).
-   Print de resultaten van de berekeningen in parent en child af.
+4. Voeg nu het volgende user space programma toe:
+   ```c
+   #include "user.h"
+
+   double get_sum() {
+     double sum = 0;
+
+     for (double d = 1.23; d < 100; d *= 1.9) {
+       sum += d;
+       sleep(1);
+     }
+
+     return sum;
+   }
+
+   int main() {
+     double sum = 0;
+
+     if (fork() != 0) {
+       sum = get_sum();
+       wait(0);
+     } else {
+       sum = get_sum();
+     }
+
+     printf("Sum: %d\n", (int)sum);
+
+     return 0;
+   }
+
+   ```
+   Dit programma voert een gelijkaardige lus uit als het vorige maar doet dit in een parent en in een child proces.
+   Verder zal in elke iteratie van de lus een syscall gebeuren.
+   > :information_source: `sleep(n)` in xv6 zal het oproepende proces `n * 100ms` doen slapen.
+   > Dit geeft andere processen de tijd om uit te voeren.
+
    Merk je iets op?
-   Voer je test programma meerdere keren uit en bekijk de resultaten.
-   > :warning: De `printf` versie in xv6 ondersteunt het afprinten van `double`s niet.
-   > Cast een `double` die je wilt printen dus eerst naar een `int` (`(int)val`).
+   Voer dit programma meerdere keren uit en bekijk de resultaten.
 
 Je hebt waarschijnlijk gemerkt dat je inconsistente resultaten krijgt (zo niet, ga terug naar punt 4).
 Zoals eerder uitgelegd, moet de code in de trampoline de waarden in de general purpose register opslaan in het trapframe om de waarden niet te verliezen.
