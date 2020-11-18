@@ -57,7 +57,7 @@ Het kan echter ook gebeuren dat een instructie *faalt*.
 Denk bijvoorbeeld aan de volgende simpele instructie:
 
 ```asm
-sw t0, (t1)
+sd t0, (t1)
 ```
 
 De waarde in register `t0` wordt opgeslagen op het adres in register `t1`.
