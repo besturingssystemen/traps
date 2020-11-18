@@ -17,6 +17,7 @@
   - [Interrupts in xv6](#interrupts-in-xv6)
   - [Device drivers](#device-drivers)
   - [Timer interrupts](#timer-interrupts)
+  - [Interrupt counters](#interrupt-counters)
 - [Permanente Evaluatie](#permanente-evaluatie)
   - [Lazy allocation](#lazy-allocation)
 
@@ -415,7 +416,7 @@ Zoals de naam doet uitschijnen, is een software interrupt een interrupt die niet
 In RISC-V kunnen interrupts door software getriggered worden door naar een _interrupt pending_ CSR te schrijven, in dit geval het `sip` CSR.
 Dit zorgt ervoor dat een timer interrupt indirect toch in supervisor mode [opgevangen kan worden][handle ssi].
 
-## Interrupt counter
+## Interrupt counters
 
 We gaan nu een syscall toevoegen die ons informatie geeft over het aantal interrupts dat er zijn gebeurd sinds xv6 opgestart is.
 Er zijn drie types interrupts die xv6 afhandelt: timer, UART en disk (VIRTIO) en we willen aparte informatie krijgen over alle types.
