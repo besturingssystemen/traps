@@ -410,7 +410,25 @@ In xv6 zijn dit de enige interrupts en exceptions die door machine mode worden a
 Je kan in [`start()`][start] zien dat alle andere exceptions gedelegeerd worden naar supervisor mode.
 In de functie [`timerinit()`][timerinit] wordt om die reden de machine mode trap handler geconfigueerd zodat deze verwijst naar een trap handler specifiek geschreven voor timer interrupts, namelijk de functie [`timervec`][timervec] in `kernel/kernelvec.S`.
 
-> :information_source: Om de werklast van deze zitting te beperken voorzien we dit jaar geen oefening over interrupts.
+Om ervoor te zorgen dat timer interrupts uiteindelijk toch in supervisor mode afgehandeld kunnen worden, zal deze functie, na het [instellen van de volgende time interrupt][schedule next timer irq], een _supervisor software interrupt_ [triggeren][raise ssi].
+Zoals de naam doet uitschijnen, is een software interrupt een interrupt die niet door externe hardware, maar door software expliciet getriggered wordt.
+In RISC-V kunnen interrupts door software getriggered worden door naar een _interrupt pending_ CSR te schrijven, in dit geval het `sip` CSR.
+Dit zorgt ervoor dat een timer interrupt indirect toch in supervisor mode [opgevangen kan worden][handle ssi].
+
+## Interrupt counter
+
+We gaan nu een syscall toevoegen die ons informatie geeft over het aantal interrupts dat er zijn gebeurd sinds xv6 opgestart is.
+Er zijn drie types interrupts die xv6 afhandelt: timer, UART en disk (VIRTIO) en we willen aparte informatie krijgen over alle types.
+xv6 houdt momenteel niet bij hoe vaak interrupts voorkomen.
+
+1. Pas [`devintr`][devintr] aan om per type interrupt een aparte teller te verhogen.
+  > :bulb: Timer interrupts worden naar _alle_ CPUs gestuurd maar er is er maar één die het uitendelijk afhandeld.
+  > Waar gebeurt dit?
+  > Zorg ervoor dat je teller elke timer interrupt maar één keer telt.
+2. Voeg een nieuwe syscall `printinterrupts` toe die deze tellers afprint.
+3. Schrijf een user space programma dat de nieuwe syscall gebruikt.
+  Run het een aantal keer en probeer de resultaten te interpreteren.
+
 # Permanente Evaluatie
 ## Lazy allocation
 
@@ -544,3 +562,6 @@ Als dit gebeurt is, zou het `usertests` programma zonder fouten moeten runnen.
 [trampoline restore regs]: https://github.com/besturingssystemen/xv6-riscv/blob/103d9df6ce3154febadcf9a67791d526ec6b07ac/kernel/trampoline.S#L104-L134
 [satp kernel]: https://github.com/besturingssystemen/xv6-riscv/blob/103d9df6ce3154febadcf9a67791d526ec6b07ac/kernel/trampoline.S#L76-L79
 [satp user]: https://github.com/besturingssystemen/xv6-riscv/blob/103d9df6ce3154febadcf9a67791d526ec6b07ac/kernel/trampoline.S#L95-L97
+[schedule next timer irq]: https://github.com/besturingssystemen/xv6-riscv/blob/103d9df6ce3154febadcf9a67791d526ec6b07ac/kernel/kernelvec.S#L104-L110
+[raise ssi]: https://github.com/besturingssystemen/xv6-riscv/blob/103d9df6ce3154febadcf9a67791d526ec6b07ac/kernel/kernelvec.S#L112-L114
+[handle ssi]: https://github.com/besturingssystemen/xv6-riscv/blob/103d9df6ce3154febadcf9a67791d526ec6b07ac/kernel/trap.c#L203-L215
