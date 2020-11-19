@@ -451,7 +451,7 @@ Met alle informatie die we in deze oefenzitting verzameld hebben is het interess
 
 * Lees de code in [kernel/start.c][start]. Probeer de code te begrijpen aan de hand van de commentaren en de kennis die je in deze sessie hebt opgedaan.
 
-Deze code wordt opgeroepen als deel van de boot van xv6 en bevat de code waarin de processor geconfigueerd wordt. 
+Deze code wordt opgeroepen als deel van de boot van xv6 en bevat de code waarin de processor geconfigureerd wordt. 
 Aan het einde van de configuratie wordt (via `mret`) overgegaan naar supervisor mode en de controle doorgegeven aan de main-functie in de kernel.
 Eerder hebben jullie hier reeds de floating point unit van de processor aangezet.
 Merk op dat hier de timer interrupts ook geactiveerd worden.
