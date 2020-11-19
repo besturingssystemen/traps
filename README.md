@@ -529,7 +529,7 @@ Je kan dit uitvoeren zoals elk ander user space programma.
 De volgende stap is om `sbrk` _lazy_ te laten werken.
 Zoals eerder beschreven, wilt dit zeggen dat geheugen niet direct in het proces gemapt wordt tijdens een oproep van `sbrk`.
 
-1. Zoek uit hoe `sbrk` precies werkt, begin hiervoor met het lezen van de [`sys_sbrk`][sys_sbrk] functie.
+4. Zoek uit hoe `sbrk` precies werkt, begin hiervoor met het lezen van de [`sys_sbrk`][sys_sbrk] functie.
    Als er een positief getal aan `sbrk` wordt gegeven, zal het geheugen van het proces vergroot worden.
    In plaats van dit direct te doen, moet je ervoor zorgen dat de aanvraag enkel geregistreerd wordt zonder geheugen te mappen.
    De [`struct proc::sz`][proc sz] variabele geeft aan hoeveel geheugen een proces gebruikt.
