@@ -524,7 +524,7 @@ Je kan hiervoor bijvoorbeeld de `usertests` executable gebruiken.
 Dit is een user space programma dat standaard met xv6 wordt geleverd en een hele hoop testen uitvoert.
 Je kan dit uitvoeren zoals elk ander user space programma.
 
-> :warning: Een huidige bug in de `usertests` zorgt ervoor dat de bigwrite test faalt indien je meer dan 1 user space programma hebt toegevoegd aan xv6. Je kan deze user test overslaan door regel 2771 in `user/usertests.c` in comments te zetten. We werken aan een betere oplossing voor dit probleem.
+> :warning: De `usertests` voert een test (bigwrite) uit die zeer veel data schrijft naar het file system. Indien je zelf enkele programma's aan xv6 toevoegt, faalt deze test omdat het file system daar vol komt te zitten. Los dit op door in `kernel/params.h` de constante `FSSIZE` op een grotere waarde (bvb 2000) te zetten.
 
 De volgende stap is om `sbrk` _lazy_ te laten werken.
 Zoals eerder beschreven, wilt dit zeggen dat geheugen niet direct in het proces gemapt wordt tijdens een oproep van `sbrk`.
