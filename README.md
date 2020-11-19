@@ -503,9 +503,20 @@ Pas wanneer het process dit geheugen probeert te gebruiken, en er dus een page f
 2. Voeg een functie `void pagefault(uint64 va)` toe aan [`vm.c`][vm.c].
    Het `va` argument zal aangeven welk virtueel adres werd aangesproken toen de page fault gebeurde.
    Print hier voorlopig een boodschap af en stop het huidige process door de [`struct proc::killed`][proc killed] variabele op `1` te zetten voor het huidige proces.
-3. Zorg ervoor dat deze functie opgeroepen wordt wanneer er een page fault in user mode voorkomt.
-   Bekijk hiervoor de [`usertrap`][usertrap] functie en laat je inspireren door hoe syscalls daar afgehandeld worden.
+
+Ons volgende doel is om ervoor te zorgen dat, wanneer er een load of store page fault optreedt, onze handler wordt opgeroepen.
+Dit vervangt het normale gedrag waarbij deze exceptions er gewoon voor zorgt dat een error geprint wordt. Op dit moment print je eigen handler uiteraard ook enkel nog maar een boodschap, maar dat zullen we aanpassen.
+
+> :bulb: Instruction page faults vangen we niet op. De heap is namelijk niet executable. Als een user space programma springt naar een gedeelte lazy heap willen we dit niet mappen, enkel indien er gelezen of geschreven wordt.
+
+3. Zorg ervoor dat `void pagefault(uint64 va)` opgeroepen wordt wanneer er een page fault in user mode voorkomt.
+   Bekijk hiervoor de [`usertrap`][usertrap] functie.
    Het virtuele adres dat de page fault veroorzaakte, vind je in het `stval` CSR ([hint][stval hint]).
+   Je moet er ook voor zorgen dat interrupts terug enabled worden vóór de uitvoering van je handler, kijk hoe dit gebeurt voor system calls.
+
+ > :warning: Zorg ervoor dat eventuele waarden die je nodig hebt uit CSRs al in een variabele zitten alvorens je interrupts terug enabled, anders kunnen deze waarden verloren gaan (zie comments bij het enablen van interrupts in het system call gedeelte).
+
+ > :information_source: Het system call gedeelte verhoogt `epc` in het trapframe (de waarde van de program counter op het moment van de exception) met 4. Dit zorgt ervoor dat wanneer de trap handler returnt naar user space, we niet terugspringen naar de `ecall` instructie maar wel naar de instructie erna. In het geval van de page fault handler willen we echter de instructie die de page fault veroorzaakt heeft opnieuw laten uitvoeren (na mapping van de page), dus willen we deze instructie zeker niet overslaan.
 
 Als het goed is, heb je nu een werkende page fault handler die een boodschap print en het proces killt.
 Dit is een goed moment om eens te controleren of de kernel nog naar behoren werkt.
@@ -513,10 +524,12 @@ Je kan hiervoor bijvoorbeeld de `usertests` executable gebruiken.
 Dit is een user space programma dat standaard met xv6 wordt geleverd en een hele hoop testen uitvoert.
 Je kan dit uitvoeren zoals elk ander user space programma.
 
+> :warning: Een huidige bug in de `usertests` zorgt ervoor dat de bigwrite test faalt indien je meer dan 1 user space programma hebt toegevoegd aan xv6. Je kan deze user test overslaan door regel 2771 in `user/usertests.c` in comments te zetten. We werken aan een betere oplossing voor dit probleem.
+
 De volgende stap is om `sbrk` _lazy_ te laten werken.
 Zoals eerder beschreven, wilt dit zeggen dat geheugen niet direct in het proces gemapt wordt tijdens een oproep van `sbrk`.
 
-4. Zoek uit hoe `sbrk` precies werkt, begin hiervoor met het lezen van de [`sys_sbrk`][sys_sbrk] functie.
+1. Zoek uit hoe `sbrk` precies werkt, begin hiervoor met het lezen van de [`sys_sbrk`][sys_sbrk] functie.
    Als er een positief getal aan `sbrk` wordt gegeven, zal het geheugen van het proces vergroot worden.
    In plaats van dit direct te doen, moet je ervoor zorgen dat de aanvraag enkel geregistreerd wordt zonder geheugen te mappen.
    De [`struct proc::sz`][proc sz] variabele geeft aan hoeveel geheugen een proces gebruikt.
