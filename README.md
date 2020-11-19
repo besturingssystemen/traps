@@ -125,7 +125,9 @@ In de andere privilegeniveaus gebeurt exact hetzelfde, maar dan met de registers
 
 De tabellen uit de specs voor [mcause](img/mcause.png) en [scause](img/scause.png) kunnen gebruikt worden om te bepalen welke waarde in deze registers geplaatst worden per interrupt of exception.
 
-* **Oefening** Een programma in user-mode voert de instructie op adres `0x4B1D` uit: `sw t0, 0x0FF1CE`. Dit adres bevindt zich in een pagina die niet schrijfbaar is. De waarde van het `medeleg` register staat op `0xffffffff`, de waarde van het `sedeleg` register op `0x0`. In `mtvec` staat het adres `0xdeadbeef`, in `stvec` staat het adres `0xcafebabe` en in `utvec` staat het adres `0xBAADF00D`. Op welk adres bevindt zich de trap handler die de exception zal afhandelen? In welk privilegeniveau wordt de exception afgehandeld? Welke waarden zullen er in de `xcause`, `xepc` en `xtval` registers geplaatst worden (en welke letter is *x*)?
+* **Oefening** Een programma in user-mode voert de instructie op adres `0x4B1D` uit: `sd t0, 0x0FF1C0`. Dit adres bevindt zich in een pagina die niet schrijfbaar is. De waarde van het `medeleg` register staat op `0xffffffff`, de waarde van het `sedeleg` register op `0x0`. In `mtvec` staat het adres `0xdeadbeef`, in `stvec` staat het adres `0xcafebabe` en in `utvec` staat het adres `0xBAADF00D`. Op welk adres bevindt zich de trap handler die de exception zal afhandelen? In welk privilegeniveau wordt de exception afgehandeld? Welke waarden zullen er in de `xcause`, `xepc` en `xtval` registers geplaatst worden (en welke letter is *x*)?
+
+> :bulb: Een pagina aanspreken op een niet-toegelaten manier veroorzaakt altijd een page fault. Het soort instructie dat je uitvoert bepaalt de soort page fault die zal optreden. Instructies die schrijven naar geheugen zonder toegang veroorzaken store page faults, instructies die lezen uit geheugen zonder toegang load page faults. Een instruction page fault treedt op wanneer de instructie die uitgevoerd moet worden op een pagina staat zonder de correcte permissies.
 
 ## Virtual memory
 
@@ -174,8 +176,7 @@ Bij de overgang van user space naar kernel space wordt, aan het einde van de tra
 Om terug te keren van kernel space naar user space definieert de trampolinepagina de functie `userret`.
 
 * **Oefening** De trampolinepagina staat gemapt met `R` (read) en `X` (execute) permissies. Daarnaast is de pagina enkel toegankelijk in supervisor mode (de `U`-bit is inactief). Stel dat de trampolinepagina ook `W` (write) permissies zou hebben en user-mode access zou enabled zijn. Wat voor probleem zou dit kunnen opleveren?
-* **Oefening** Stel dat je geen `W` (write) permissions hebt maar nog steeds `U` (user) permissions. Kan het dan nog mislopen?
-
+ 
 ## Floating point ondersteuning
 
 Het is je misschien opgevallen dat alle user space programma's die we tot nu toe geschreven hebben, enkel _integer_ operaties gebruiken.
