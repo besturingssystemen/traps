@@ -533,7 +533,7 @@ Zoals eerder beschreven, wilt dit zeggen dat geheugen niet direct in het proces 
    Als er een positief getal aan `sbrk` wordt gegeven, zal het geheugen van het proces vergroot worden.
    In plaats van dit direct te doen, moet je ervoor zorgen dat de aanvraag enkel geregistreerd wordt zonder geheugen te mappen.
    De [`struct proc::sz`][proc sz] variabele geeft aan hoeveel geheugen een proces gebruikt.
-   Een negatief argument voor `sbrk` zorgt ervoor dat het geheugen _verkleint_ wordt; dit moet _wel_ blijven gebeuren (waarom?).
+   Een negatief argument voor `sbrk` zorgt ervoor dat het geheugen _verkleind_ wordt; dit moet _wel_ blijven gebeuren (waarom?).
 
 Na deze stap zullen user space processen die `sbrk` gebruiken uiteraard niet meer juist werken.
 Wat verwacht je dat er gebeurt met zulke processen?
